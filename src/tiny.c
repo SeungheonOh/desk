@@ -486,6 +486,8 @@ static void server_cursor_motion(struct wl_listener *listener, void *data) {
 	wlr_cursor_move(server->cursor, &event->pointer->base,
 			event->delta_x, event->delta_y);
 	process_cursor_motion(server, event->time_msec);
+
+	printf("cursor at: %f, %f\n", server->cursor->x, server->cursor->y);
 }
 
 static void server_cursor_motion_absolute(

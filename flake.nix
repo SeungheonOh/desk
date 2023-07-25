@@ -35,8 +35,10 @@
           pkgs.libdisplay-info
           pkgs.libliftoff
           pkgs.xwayland
+          pkgs.cairo
           pkgs.ffmpeg
           pkgs.libinput
+          pkgs.cglm
         ];
       };
   };

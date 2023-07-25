@@ -42,6 +42,7 @@
 
 #define PI 3.1415926535
 
+
 GLuint texture;
 
 /* For brevity's sake, struct members are annotated where they are used. */
@@ -56,6 +57,7 @@ struct tinywl_server {
   struct wlr_backend *backend;
   struct wlr_renderer *renderer;
   struct wlr_allocator *allocator;
+  struct wlr_scene *scene;
 
   struct wlr_xdg_shell *xdg_shell;
   struct wl_listener new_xdg_surface;
@@ -93,14 +95,6 @@ struct tinywl_server {
   vec3 cameraUp;
 
   vec3 mov;
-
-  unsigned int shaderProgram;
-  GLint samplerLoc;
-  GLint modelLoc;
-  GLint viewLoc;
-  GLint projectionLoc;
-
-  int initialized;
 };
 
 struct tinywl_output {
@@ -137,176 +131,23 @@ struct tinywl_keyboard {
 
 const char* prettyEglErr(EGLint err) {
   switch(err) {
-  case EGL_SUCCESS:
-    return "The last function succeeded without error";
-  case EGL_NOT_INITIALIZED:
-    return "EGL is not initialized, or could not be initialized, for the specified EGL display connection";
-  case EGL_BAD_ACCESS:
-    return "EGL cannot access a requested resource (for example a context is bound in another thread)";
-  case EGL_BAD_ALLOC:
-    return "EGL failed to allocate resources for the requested operation";
-  case EGL_BAD_ATTRIBUTE:
-    return "An unrecognized attribute or attribute value was passed in the attribute list";
-  case EGL_BAD_CONTEXT:
-    return "An EGLContext argument does not name a valid EGL rendering context";
-  case EGL_BAD_CONFIG:
-    return "An EGLConfig argument does not name a valid EGL frame buffer configuration";
-  case EGL_BAD_CURRENT_SURFACE:
-    return "The current surface of the calling thread is a window, pixel buffer or pixmap that is no longer valid";
-  case EGL_BAD_DISPLAY:
-    return "An EGLDisplay argument does not name a valid EGL display connection";
-  case EGL_BAD_SURFACE:
-    return "An EGLSurface argument does not name a valid surface (window, pixel buffer or pixmap) configured for GL rendering";
-  case EGL_BAD_MATCH:
-    return "Arguments are inconsistent (for example, a valid context requires buffers not supplied by a valid surface)";
-  case EGL_BAD_PARAMETER:
-    return "One or more argument values are invalid";
-  case EGL_BAD_NATIVE_PIXMAP:
-    return "A NativePixmapType argument does not refer to a valid native pixmap";
-  case EGL_BAD_NATIVE_WINDOW:
-    return "A NativeWindowType argument does not refer to a valid native window";
-  case EGL_CONTEXT_LOST:
-    return "A power management event has occurred. The application must destroy all contexts and reinitialise OpenGL ES state and objects to continue rendering";
+  case EGL_SUCCESS: return "The last function succeeded without error";
+  case EGL_NOT_INITIALIZED: return "EGL is not initialized, or could not be initialized, for the specified EGL display connection";
+  case EGL_BAD_ACCESS: return "EGL cannot access a requested resource (for example a context is bound in another thread)";
+  case EGL_BAD_ALLOC: return "EGL failed to allocate resources for the requested operation";
+  case EGL_BAD_ATTRIBUTE: return "An unrecognized attribute or attribute value was passed in the attribute list";
+  case EGL_BAD_CONTEXT: return "An EGLContext argument does not name a valid EGL rendering context";
+  case EGL_BAD_CONFIG: return "An EGLConfig argument does not name a valid EGL frame buffer configuration";
+  case EGL_BAD_CURRENT_SURFACE: return "The current surface of the calling thread is a window, pixel buffer or pixmap that is no longer valid";
+  case EGL_BAD_DISPLAY: return "An EGLDisplay argument does not name a valid EGL display connection";
+  case EGL_BAD_SURFACE: return "An EGLSurface argument does not name a valid surface (window, pixel buffer or pixmap) configured for GL rendering";
+  case EGL_BAD_MATCH: return "Arguments are inconsistent (for example, a valid context requires buffers not supplied by a valid surface)";
+  case EGL_BAD_PARAMETER: return "One or more argument values are invalid";
+  case EGL_BAD_NATIVE_PIXMAP: return "A NativePixmapType argument does not refer to a valid native pixmap";
+  case EGL_BAD_NATIVE_WINDOW: return "A NativeWindowType argument does not refer to a valid native window";
+  case EGL_CONTEXT_LOST: return "A power management event has occurred. The application must destroy all contexts and reinitialise OpenGL ES state and objects to continue rendering";
   default: return "Unknown error";
   }
-}
-
-void checkEglErr(const char* stmt, const char* fname, int line) {
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-      printf("OpenGL error %s, at %s:%i - for %s\n", prettyEglErr(err), fname, line, stmt);
-      abort();
-    }
-}
-
-#define GL(stmt) \
-  do { \
-  stmt; \
-  checkEglErr(#stmt, __FILE__, __LINE__); \
-  } while (0)
-
-struct renderContext {
-  struct tinywl_server *server;
-  struct wlr_box geo_box;
-  struct wlr_output *output;
-};
-
-void renderSurface(struct wlr_surface *surface, int x, int y, void* data) {
-  struct renderContext *context = data;
-  struct tinywl_server *server = context->server;
-  struct wlr_texture *stexture = wlr_surface_get_texture(surface);
-  struct wlr_box box = context->geo_box;
-  int height = context->output->height, width = context->output->width;
-
-  if(!server->initialized) {
-    printf("not initialized: %d\n", server->initialized);
-    return;
-  }
-  if(!stexture) return;
-
-  struct wlr_box surfaceBox;
-  wlr_surface_get_extends(surface, &surfaceBox);
-
-  printf("surface location: %d, %d, %d, %d\n", surfaceBox.x, surfaceBox.y, surfaceBox.width, surfaceBox.height);
-
-  struct wlr_gles2_texture_attribs attrs;
-  wlr_gles2_texture_get_attribs(stexture, &attrs);
-
-  unsigned int shaderProgram = server->shaderProgram;
-
-  //float n = 0.0f, p = (float)box.width, p2 = (float)box.height;
-  //float n = 0, p = (float)1, p2 = (float)1;
-  float n = 0, p = (float)1, p2 = (float)1;
-
-  GLfloat vVertices[] = { n,  p2, 0.0f,  // Position 0
-			  0.0f,  1.0f,        // TexCoord 0
-
-			  n, n, 0.0f,  // Position 1
-			  0.0f,  0.0f,        // TexCoord 1
-
-			  p, n, 0.0f,  // Position 2
-			  1.0f,  0.0f,        // TexCoord 2
-
-			  p,  p2, 0.0f,  // Position 3
-			  1.0f,  1.0f         // TexCoord 3
-  };
-  GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
-
-  GLint appTexture = attrs.tex;
-  GLenum appTextureTarget = attrs.target;
-
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  glUseProgram(shaderProgram);
-
-  // Draw
-  GLint samplerLoc = server->samplerLoc;
-  GLint modelLoc = server->modelLoc;
-  GLint viewLoc = server->viewLoc;
-  GLint projectionLoc = server->projectionLoc;
-
-  glVertexAttribPointer ( 0, 3, GL_FLOAT,
-			  GL_FALSE, 5 * sizeof ( GLfloat ), vVertices );
-  // Load the texture coordinate
-  glVertexAttribPointer ( 1, 2, GL_FLOAT,
-			  GL_FALSE, 5 * sizeof ( GLfloat ), &vVertices[3] );
-
-  mat4 trans = GLM_MAT4_IDENTITY_INIT;
-  /* glm_translate(trans, (float[3]){(float)box.x+box.width, (float)box.y+box.height, 0.0f}); */
-  //glm_translate(trans, (float[3]){(float)server->cursor->x, (float)server->cursor->y, 0.0f});
-
-  static float rot = 0;
-
-  rot += PI/360;
-
-  //glm_translate(trans, (float[3]){-((float)box.x + x)/(float)2, -((float)box.y + y)/(float)2, 0.0f});
-  /* glm_rotate(trans, rot, GLM_ZUP); */
-  /* glm_translate(trans, (float[3]){((float)box.x + x)/(float)2, ((float)box.y + y)/(float)2, 0.0f}); */
-  //glm_translate(trans, (float[3]){(float)-300, (float)-50, 0.0f});
-
-  glm_translate(trans, (float[3]){(float)surface->current.width/(float)2, (float)surface->current.height/(float)2, 0.0f});
-  glm_rotate(trans, rot, GLM_ZUP);
-  glm_translate(trans, (float[3]){(float)box.x + x, (float)box.y + y, 0.0f});
-
-  glm_translate(trans, (float[3]){-(float)surface->current.width/(float)2, -(float)surface->current.height/(float)2, 0.0f});
-  glm_scale(trans, (float[3]) {(float)surface->current.width, (float)surface->current.height, 1.0f});
-
-  printf("relative pos: %d, %d\n", x, y);
-
-  mat4 proj = GLM_MAT4_IDENTITY_INIT;
-  glm_ortho(0, width, 0, height, 0.00001f, 10000.0f, proj);
-  //glm_ortho(-1, 1, -1, 1, 0.00001f, 10000.0f, proj);
-
-  mat4 view = GLM_MAT4_IDENTITY_INIT;
-
-  glUniformMatrix4fv(modelLoc, 1, GL_FALSE, trans);
-  glUniformMatrix4fv(viewLoc, 1, GL_FALSE, view);
-  glUniformMatrix4fv(projectionLoc, 1, GL_FALSE, proj);
-
-  glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
-
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(appTextureTarget, appTexture);
-
-  glTexParameteri(appTextureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(appTextureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-  printf("Texture: %d\n", appTexture);
-
-  glUniform1i(samplerLoc, 0);
-
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
-
-  glDisableVertexAttribArray(0);
-  glDisableVertexAttribArray(1);
-
-  glBindTexture(appTextureTarget, 0);
-
-  struct timespec now;
-  clock_gettime(CLOCK_MONOTONIC, &now);
-  wlr_surface_send_frame_done(surface, &now);
 }
 
 static void output_frame(struct wl_listener *listener, void *data) {
@@ -317,42 +158,87 @@ static void output_frame(struct wl_listener *listener, void *data) {
   wlr_output_attach_render(output->wlr_output, NULL);
   wlr_renderer_begin(output->server->renderer, output->wlr_output->width, output->wlr_output->height);
 
-  glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
+  /* GLuint frameBufferName = 0; */
+  /* glGenFramebuffers(1, &frameBufferName); */
+  /* glBindFramebuffer(GL_FRAMEBUFFER, frameBufferName); */
 
-  if(!wl_list_empty(&output->server->views)) {
-    struct tinywl_view *curr = output->server->views.next;
-    struct wlr_seat *seat = output->server->seat;
+  /* GLuint renderedTexture; */
+  /* glGenTextures(1, &renderedTexture); */
 
-    struct wlr_box geo_box;
-    wlr_xdg_surface_get_geometry(curr->xdg_toplevel->base, &geo_box);
+  /* glBindTexture(GL_TEXTURE_2D, renderedTexture); */
+  /* glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, output->wlr_output->width, output->wlr_output->height, 0, GL_RGB, GL_UNSIGNED_BYTE, 0); */
 
-    printf("x: %d, y: %d, width: %d, height: %d\n", geo_box.x, geo_box.y, geo_box.width, geo_box.height);
+  /* glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST); */
+  /* glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST); */
 
-    struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
-    wlr_xdg_toplevel_set_activated(curr->xdg_toplevel, true);
+  /* glFramebufferTexture(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, renderedTexture, 0); */
+  /* glBindFramebuffer(GL_FRAMEBUFFER, frameBufferName); */
 
-    wlr_seat_keyboard_notify_enter(seat, curr->xdg_toplevel->base->surface,
-				   keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
-    wlr_seat_pointer_notify_enter(seat, curr->xdg_toplevel->base->surface, 0, 0);
+  const char *vertexShaderSource =
+    "#version 300 es                            \n"
+    "layout(location = 0) in vec4 a_position;   \n"
+    "layout(location = 1) in vec2 a_texCoord;   \n"
+    "out vec2 v_texCoord;                       \n"
+    "uniform mat4 model;                        \n"
+    "uniform mat4 view;                         \n"
+    "uniform mat4 projection;                   \n"
+    "void main()                                \n"
+    "{                                          \n"
+    "   gl_Position = projection * view * model * a_position;\n"
+    "   v_texCoord = a_texCoord;                \n"
+    "}                                          \n";
 
-    struct renderContext ctx = {output->server, geo_box, output->wlr_output};
-    ctx.geo_box.x = 200;
-    ctx.geo_box.y = 24 + 20;
+  const char *fragmentShaderSource =
+    "#version 300 es                                     \n"
+    "precision mediump float;                            \n"
+    "in vec2 v_texCoord;                                 \n"
+    "layout(location = 0) out vec4 outColor;             \n"
+    "uniform sampler2D s_texture;                        \n"
+    "void main()                                         \n"
+    "{                                                   \n"
+    "  outColor = texture2D(s_texture, v_texCoord.xy).bgra;   \n"
+    "}                                                   \n";
 
-    wlr_surface_for_each_surface(curr->xdg_toplevel->base->surface, renderSurface, &ctx);
+  unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
+  glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
+  glCompileShader(vertexShader);
+  // check for shader compile errors
+  int success;
+  char infoLog[512];
+  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
 
-    /* wlr_renderer_end(output->server->renderer); */
-    /* wlr_output_commit(output->wlr_output); */
-    /* return; */
+    wlr_log(WLR_ERROR, "vertex shader failed to compile: %s", infoLog);
   }
+  // fragment shader
+  unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
+  glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
+  glCompileShader(fragmentShader);
+  // check for shader compile errors
+  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
+    wlr_log(WLR_ERROR, "fragment shader failed to compile: %s", infoLog);
+  }
+  // link shaders
+  unsigned int shaderProgram = glCreateProgram();
+  glAttachShader(shaderProgram, vertexShader);
+  glAttachShader(shaderProgram, fragmentShader);
+  glLinkProgram(shaderProgram);
+  // check for linking errors
+  glGetProgramiv(shaderProgram, GL_LINK_STATUS, &success);
+  if (!success) {
+    glGetProgramInfoLog(shaderProgram, 512, NULL, infoLog);
+    wlr_log(WLR_ERROR, "shaders failed to link: %s", infoLog);
+  }
+  glDeleteShader(vertexShader);
+  glDeleteShader(fragmentShader);
 
-  unsigned int shaderProgram = output->server->shaderProgram;
-
-  GLint samplerLoc = output->server->samplerLoc;
-  GLint modelLoc = output->server->modelLoc;
-  GLint viewLoc = output->server->viewLoc;
-  GLint projectionLoc = output->server->projectionLoc;
+  GLint samplerLoc = glGetUniformLocation(shaderProgram, "s_texture");
+  GLint modelLoc = glGetUniformLocation(shaderProgram, "model");
+  GLint viewLoc = glGetUniformLocation(shaderProgram, "view");
+  GLint projectionLoc = glGetUniformLocation(shaderProgram, "projection");
 
   float n = -1.0f, p = 1.0f;
 
@@ -370,14 +256,46 @@ static void output_frame(struct wl_listener *listener, void *data) {
   };
   GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
-  GLint appTexture = texture;
+  GLint appTexture;
   GLenum appTextureTarget = GL_TEXTURE_2D;
+
+  if(wl_list_empty(&output->server->views))
+    appTexture = texture;
+  else {
+    struct tinywl_view *curr = output->server->views.next;
+    struct wlr_seat *seat = output->server->seat;
+
+    struct wlr_box geo_box;
+    wlr_xdg_surface_get_geometry(curr->xdg_toplevel->base, &geo_box);
+
+    printf("x: %d, y: %d, width: %d, height: %d\n", geo_box.x, geo_box.y, geo_box.width, geo_box.height);
+
+    struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+    wlr_xdg_toplevel_set_activated(curr->xdg_toplevel, true);
+
+    wlr_seat_keyboard_notify_enter(seat, curr->xdg_toplevel->base->surface,
+				   keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+
+    struct wlr_texture *t = wlr_surface_get_texture(curr->xdg_toplevel->base->surface);
+
+    struct wlr_gles2_texture_attribs attrs;
+    wlr_gles2_texture_get_attribs(t, &attrs);
+
+    appTexture = attrs.tex;
+    appTextureTarget = attrs.target;
+
+    if(curr->xdg_toplevel->title)
+      printf("xdg toplevel title: %s\n", curr->xdg_toplevel->title);
+  }
 
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   // Draw
-  GL(glUseProgram(shaderProgram));
+  glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
+  glClear(GL_COLOR_BUFFER_BIT);
+
+  glUseProgram(shaderProgram);
 
   glVertexAttribPointer ( 0, 3, GL_FLOAT,
 			  GL_FALSE, 5 * sizeof ( GLfloat ), vVertices );
@@ -388,18 +306,21 @@ static void output_frame(struct wl_listener *listener, void *data) {
   mat4 trans = GLM_MAT4_IDENTITY_INIT;
   int height = output->wlr_output->height, width = output->wlr_output->width;
 
-  glm_translate(trans, (float[3]){(float)output->server->cursor->x, (float)output->server->cursor->y, -1.0f});
+  glm_translate(trans, (float[3]){(float)output->server->cursor->x - (float)width/2, (float)output->server->cursor->y - (float)height/2, -1.0f});
   glm_scale(trans, (float[3]){50.0f, 50.0f, 1.0f});
 
+  /* glm_rotate(trans, PI / 4, GLM_YUP); */
+  /* glm_rotate(trans, PI / 4, GLM_XUP); */
+
   mat4 proj = GLM_MAT4_IDENTITY_INIT;
-  glm_ortho(0, width, 0, height, 0.00001f, 1000.0f, proj);
+  glm_perspective(PI/2, (float)width/(float)height, 0.0001f, 10000.0f, proj);
 
   mat4 view = GLM_MAT4_IDENTITY_INIT;
   static mat4 viewM = GLM_MAT4_IDENTITY_INIT;
-
-  static float s = 1.0f;
-  s += output->server->mov[0];
-  //glm_scale(view, (float[3]){s, s, 1.0f});
+#define MIN(a, b) a < b ? a : b
+  float scale = 1 / (MIN((float)width, (float)height) / 2);
+  glm_scale(view, (float[3]){scale, scale, 1.0f});
+  //glm_scale(view, (float[3]){1/1280.0f, 1/720.0f, 1.0f});
   //glm_translate(viewM, (float[3]){0.0f, 0.0f, output->server->mov[0] * 5});
 
   glm_mat4_mul(view, viewM, view);
@@ -422,11 +343,6 @@ static void output_frame(struct wl_listener *listener, void *data) {
   glUniform1i(samplerLoc, 0);
 
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
-
-  glDisableVertexAttribArray(0);
-  glDisableVertexAttribArray(1);
-
-  glBindTexture(appTextureTarget, 0);
 
   wlr_renderer_end(output->server->renderer);
   wlr_output_commit(output->wlr_output);
@@ -512,8 +428,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
    */
   wlr_output_layout_add_auto(server->output_layout, wlr_output);
 
-  server->initialized = false;
-
   printf("width: %d, height: %d\n", output->wlr_output->width, output->wlr_output->height);
 
   cairo_surface_t *hugme = cairo_image_surface_create_from_png("hug_me_no_text.png");
@@ -540,76 +454,6 @@ static void server_new_output(struct wl_listener *listener, void *data) {
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, hugmeWidth, hugmeHeight, 0, GL_RGBA, GL_UNSIGNED_BYTE, hugmeData);
 
   glBindTexture(GL_TEXTURE_2D, 0);
-
-  const char *vertexShaderSource =
-    "#version 300 es                            \n"
-    "layout(location = 0) in vec4 a_position;   \n"
-    "layout(location = 1) in vec2 a_texCoord;   \n"
-    "out vec2 v_texCoord;                       \n"
-    "uniform mat4 model;                        \n"
-    "uniform mat4 view;                         \n"
-    "uniform mat4 projection;                   \n"
-    "void main()                                \n"
-    "{                                          \n"
-    "   gl_Position = projection * view * model * a_position;\n"
-    "   v_texCoord = a_texCoord;                \n"
-    "}                                          \n";
-
-  const char *fragmentShaderSource =
-    "#version 300 es                                     \n"
-    "precision mediump float;                            \n"
-    "in vec2 v_texCoord;                                 \n"
-    "layout(location = 0) out vec4 outColor;             \n"
-    "uniform sampler2D s_texture;                        \n"
-    "void main()                                         \n"
-    "{                                                   \n"
-    "  outColor = texture2D(s_texture, v_texCoord.xy);   \n"
-    "}                                                   \n";
-
-  unsigned int vertexShader = glCreateShader(GL_VERTEX_SHADER);
-  glShaderSource(vertexShader, 1, &vertexShaderSource, NULL);
-  glCompileShader(vertexShader);
-  // check for shader compile errors
-  int success;
-  char infoLog[512];
-  glGetShaderiv(vertexShader, GL_COMPILE_STATUS, &success);
-  if (!success) {
-    glGetShaderInfoLog(vertexShader, 512, NULL, infoLog);
-
-    wlr_log(WLR_ERROR, "vertex shader failed to compile: %s", infoLog);
-  }
-  // fragment shader
-  unsigned int fragmentShader = glCreateShader(GL_FRAGMENT_SHADER);
-  glShaderSource(fragmentShader, 1, &fragmentShaderSource, NULL);
-  glCompileShader(fragmentShader);
-  // check for shader compile errors
-  glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-  if (!success) {
-    glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
-    wlr_log(WLR_ERROR, "fragment shader failed to compile: %s", infoLog);
-  }
-  // link shaders
-  server->shaderProgram = glCreateProgram();
-  glAttachShader(server->shaderProgram, vertexShader);
-  glAttachShader(server->shaderProgram, fragmentShader);
-  glLinkProgram(server->shaderProgram);
-  // check for linking errors
-  glGetProgramiv(server->shaderProgram, GL_LINK_STATUS, &success);
-  if (!success) {
-    glGetProgramInfoLog(server->shaderProgram, 512, NULL, infoLog);
-    wlr_log(WLR_ERROR, "shaders failed to link: %s", infoLog);
-  }
-  glDeleteShader(vertexShader);
-  glDeleteShader(fragmentShader);
-
-  server->samplerLoc = glGetUniformLocation(server->shaderProgram, "s_texture");
-  server->modelLoc = glGetUniformLocation(server->shaderProgram, "model");
-  server->viewLoc = glGetUniformLocation(server->shaderProgram, "view");
-  server->projectionLoc = glGetUniformLocation(server->shaderProgram, "projection");
-
-  server->initialized = true;
-
-  printf("Shaders initialized===============\n");
 }
 
 void server_new_input(struct wl_listener *listener, void *data) {
@@ -764,12 +608,6 @@ static void server_cursor_motion(struct wl_listener *listener, void *data) {
   server->mov[0] = event->delta_x / 100;
   server->mov[1] = event->delta_y / 100;
   server->mov[2] = 0.0f;
-
-  static x = 0, y = 0;
-  x += event->delta_x;
-  y += event->delta_y;
-
-  wlr_seat_pointer_notify_motion(server->seat, event->time_msec, x, y);
 }
 
 static void server_cursor_motion_absolute(
@@ -789,25 +627,12 @@ static void server_cursor_motion_absolute(
   /* printf("cursor jump: %f, %f\n", event->x , event->y); */
 }
 
-static void server_cursor_button(struct wl_listener *listener, void *data) {
-  /* This event is forwarded by the cursor when a pointer emits a button
-   * event. */
-  struct tinywl_server *server =
-    wl_container_of(listener, server, cursor_button);
-  struct wlr_pointer_button_event *event = data;
-  /* Notify the client with pointer focus that a button press has occurred */
-  wlr_seat_pointer_notify_button(server->seat,
-				 event->time_msec, event->button, event->state);
-
-  printf("Cursor button event\n");
-}
-
 static void xdg_toplevel_map(struct wl_listener *listener, void *data) {
   /* Called when the surface is mapped, or ready to display on-screen. */
   struct tinywl_view *view = wl_container_of(listener, view, map);
 
   wl_list_insert(&view->server->views, &view->link);
-  wlr_xdg_toplevel_set_size(view->xdg_toplevel, 720, 480);
+  wlr_xdg_toplevel_set_size(view->xdg_toplevel, 420, 42);
 
   printf("xdg toplevel mapped\n");
 }
@@ -851,8 +676,6 @@ static void server_new_xdg_surface(struct wl_listener *listener, void *data) {
   wl_signal_add(&xdg_surface->surface->events.map, &view->map);
   view->unmap.notify = xdg_toplevel_unmap;
   wl_signal_add(&xdg_surface->surface->events.unmap, &view->unmap);
-
-  printf("XDG new toplevel request\n");
 
   /* Listen to the various events it can emit */
   /* view->map.notify = xdg_toplevel_map; */
@@ -962,7 +785,8 @@ int main(int argc, char *argv[]) {
    * positions and then call wlr_scene_output_commit() to render a frame if
    * necessary.
    */
-
+  server.scene = wlr_scene_create();
+  wlr_scene_attach_output_layout(server.scene, server.output_layout);
 
   /* Set up xdg-shell version 3. The xdg-shell is a Wayland protocol which is
    * used for application windows. For more detail on shells, refer to my
@@ -990,8 +814,6 @@ int main(int argc, char *argv[]) {
   server.cursor_motion_absolute.notify = server_cursor_motion_absolute;
   wl_signal_add(&server.cursor->events.motion_absolute,
 		&server.cursor_motion_absolute);
-  server.cursor_button.notify = server_cursor_button;
-  wl_signal_add(&server.cursor->events.button, &server.cursor_button);
 
   wl_list_init(&server.keyboards);
   server.new_input.notify = server_new_input;
@@ -1016,15 +838,6 @@ int main(int argc, char *argv[]) {
   /* Set the WAYLAND_DISPLAY environment variable to our socket and run the
    * startup command if requested. */
   setenv("WAYLAND_DISPLAY", socket, true);
-  if (fork() == 0) {
-    // wleird-subsurfaces
-    //execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#mpv -- Big_Buck_Bunny_1080_10s_5MB.mp4 --loop", (void *)NULL);
-    //execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#mpv -- checker.jpg --loop", (void *)NULL);
-    //execl("/bin/sh", "/bin/sh", "-c", "./wleird-resize-loop", (void *)NULL);
-    //execl("/bin/sh", "/bin/sh", "-c", "./wleird-subsurfaces", (void *)NULL);
-    execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#alacritty", (void *)NULL);
-    //execl("/bin/sh", "/bin/sh", "-c", "./build/test_alactritty", (void *)NULL);
-  }
 
   /* Run the Wayland event loop. This does not return until you exit the
    * compositor. Starting the backend rigged up all of the necessary event
@@ -1037,6 +850,7 @@ int main(int argc, char *argv[]) {
   /* Once wl_display_run returns, we destroy all clients then shut down the
    * server. */
   wl_display_destroy_clients(server.wl_display);
+  wlr_scene_node_destroy(&server.scene->tree.node);
   wlr_xcursor_manager_destroy(server.cursor_mgr);
   wlr_output_layout_destroy(server.output_layout);
   wl_display_destroy(server.wl_display);

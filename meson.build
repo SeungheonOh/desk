@@ -7,16 +7,20 @@ wlroots_deps = wlroots.get_variable('wlroots')
 deps = [
      wlroots_deps,
      dependency('egl'),
-     dependency('gl'),     
+     dependency('gl'),
+     dependency('cairo'),
+     dependency('cglm'),
 ]
 
 inc = [
     include_directories('protocols'),
 ]
 
+sources = files('src/events.c', 'src/server.c')
+
 executable(
-  'desk',
-  'src/main.c',
+  'testa',
+  'src/test.c',
   dependencies: deps,
   include_directories: [inc, wlroots_lib],
   c_args: ['-DWLR_USE_UNSTABLE'],
@@ -24,9 +28,18 @@ executable(
 
 
 executable(
-  'spy',
-  'src/test.c',
+  'tiny',
+  'src/tiny.c',
   dependencies: deps,
+  include_directories: [inc, wlroots_lib],
+  c_args: ['-DWLR_USE_UNSTABLE'],
+  )
+
+executable(
+  'desk',
+  'src/desk.c',
+  dependencies: deps,
+  sources: sources,
   include_directories: [inc, wlroots_lib],
   c_args: ['-DWLR_USE_UNSTABLE'],
   )
