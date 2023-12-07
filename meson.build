@@ -16,11 +16,20 @@ inc = [
     include_directories('protocols'),
 ]
 
-sources = files('src/events.c', 'src/server.c')
+src = []
+subdir('src')
 
 executable(
   'testa',
-  'src/test.c',
+  'temp/test.c',
+  dependencies: deps,
+  include_directories: [inc, wlroots_lib],
+  c_args: ['-DWLR_USE_UNSTABLE'],
+  )
+
+executable(
+  'tiny',
+  'temp/tiny.c',
   dependencies: deps,
   include_directories: [inc, wlroots_lib],
   c_args: ['-DWLR_USE_UNSTABLE'],
@@ -28,18 +37,20 @@ executable(
 
 
 executable(
-  'tiny',
-  'src/tiny.c',
+  'main',
+  'temp/main.c',
   dependencies: deps,
+  sources: src,
   include_directories: [inc, wlroots_lib],
   c_args: ['-DWLR_USE_UNSTABLE'],
   )
+
 
 executable(
   'desk',
   'src/desk.c',
   dependencies: deps,
-  sources: sources,
+  sources: src,
   include_directories: [inc, wlroots_lib],
   c_args: ['-DWLR_USE_UNSTABLE'],
   )

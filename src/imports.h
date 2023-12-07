@@ -1,4 +1,3 @@
-#define _POSIX_C_SOURCE 200112L
 #include <assert.h>
 #include <getopt.h>
 #include <stdbool.h>
@@ -39,5 +38,7 @@
 #include <cglm/mat4.h>
 #include <cglm/affine.h>
 #include <cglm/cam.h>
+
+#include "macro.h"
 
 #define PI 3.14159265358979
