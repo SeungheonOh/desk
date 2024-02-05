@@ -208,6 +208,7 @@ void renderSurface(struct wlr_surface *surface, int x, int y, void* data) {
   wlr_surface_get_extends(surface, &surfaceBox);
 
   printf("surface location: %d, %d, %d, %d\n", surfaceBox.x, surfaceBox.y, surfaceBox.width, surfaceBox.height);
+  printf("foobar %d, %d\n", width, height);  
 
   struct wlr_gles2_texture_attribs attrs;
   wlr_gles2_texture_get_attribs(stexture, &attrs);
@@ -258,25 +259,21 @@ void renderSurface(struct wlr_surface *surface, int x, int y, void* data) {
 
   static float rot = 0;
 
-  rot += PI/360;
+  rot += PI/720;
 
-  //glm_translate(trans, (float[3]){-((float)box.x + x)/(float)2, -((float)box.y + y)/(float)2, 0.0f});
-  /* glm_rotate(trans, rot, GLM_ZUP); */
-  /* glm_translate(trans, (float[3]){((float)box.x + x)/(float)2, ((float)box.y + y)/(float)2, 0.0f}); */
-  //glm_translate(trans, (float[3]){(float)-300, (float)-50, 0.0f});
+  glm_translate(trans, (float[3]){(float)box.x, (float)box.y, 0.0f});
+  glm_translate(trans, (float[3]){(float)box.width/2, (float)box.height/2 , 0.0f});      
 
-  //  glm_translate(trans, (float[3]){(float)surface->current.width/(float)2, (float)surface->current.height/(float)2, 0.0f});
-//  glm_rotate(trans, rot, GLM_ZUP);
-  glm_translate(trans, (float[3]){(float)box.x + x, (float)box.y + y, 0.0f});
+  glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);  
+  glm_translate(trans, (float[3]){x, y, 0.0f});
+  glm_translate(trans, (float[3]){-(float)box.width/2, -(float)box.height/2 , 0.0f});    
 
-  //  glm_translate(trans, (float[3]){-(float)surface->current.width/(float)2, -(float)surface->current.height/(float)2, 0.0f});
   glm_scale(trans, (float[3]) {(float)surface->current.width, (float)surface->current.height, 1.0f});
 
   printf("relative pos: %d, %d\n", x, y);
 
   mat4 proj = GLM_MAT4_IDENTITY_INIT;
   glm_ortho(0, width, 0, height, 0.00001f, 10000.0f, proj);
-  //glm_ortho(-1, 1, -1, 1, 0.00001f, 10000.0f, proj);
 
   mat4 view = GLM_MAT4_IDENTITY_INIT;
 
@@ -338,7 +335,7 @@ static void output_frame(struct wl_listener *listener, void *data) {
 
     struct renderContext ctx = {output->server, geo_box, output->wlr_output};
     ctx.geo_box.x = 200;
-    ctx.geo_box.y = 24 + 20;
+    ctx.geo_box.y = 300;
 
     wlr_surface_for_each_surface(curr->xdg_toplevel->base->surface, renderSurface, &ctx);
 

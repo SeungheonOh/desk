@@ -1,4 +1,9 @@
-project('desk', 'c')
+project('desk', 'c',
+	default_options: [
+		'optimization=2',
+		'buildtype=debugoptimized',
+	],
+)
 
 wlroots = subproject('wlroots', default_options: ['examples=false'])
 wlroots_lib = wlroots.get_variable('wlr_inc')
@@ -24,7 +29,7 @@ executable(
   'temp/test.c',
   dependencies: deps,
   include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE'],
+  c_args: ['-DWLR_USE_UNSTABLE -O'],
   )
 
 executable(
@@ -32,7 +37,7 @@ executable(
   'temp/tiny.c',
   dependencies: deps,
   include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE'],
+  c_args: ['-DWLR_USE_UNSTABLE -O'],
   )
 
 
@@ -42,7 +47,7 @@ executable(
   dependencies: deps,
   sources: src,
   include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE'],
+  c_args: ['-DWLR_USE_UNSTABLE -O'],
   )
 
 
@@ -52,6 +57,6 @@ executable(
   dependencies: deps,
   sources: src,
   include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE'],
+  c_args: ['-DWLR_USE_UNSTABLE -O'],
   )
 
