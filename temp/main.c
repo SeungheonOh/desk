@@ -554,7 +554,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 
   const char *fragmentShaderSource =
     "#version 300 es                                     \n"
-    "precision mediump float;                            \n"
+    "precision mediump faaloat;                            \n"
     "in vec2 v_texCoord;                                 \n"
     "layout(location = 0) out vec4 outColor;             \n"
     "uniform sampler2D s_texture;                        \n"
@@ -581,6 +581,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
   glCompileShader(fragmentShader);
   // check for shader compile errors
   glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
+  
   if (!success) {
     glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
     wlr_log(WLR_ERROR, "fragment shader failed to compile: %s", infoLog);

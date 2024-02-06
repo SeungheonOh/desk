@@ -2,6 +2,8 @@
 #include "imports.h"
 #include "server.h"
 #include "events.h"
+#include <time.h>
+#include <math.h>
 
 typedef struct Output {
   struct DeskServer *server;
@@ -10,6 +12,8 @@ typedef struct Output {
   struct wl_listener frame;
   struct wl_listener requestState;
   struct wl_listener destroy;
+
+  struct shader *windowShader;
 } Output;
 
 struct Output *mkOutput(struct DeskServer *,struct wlr_output*);

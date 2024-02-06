@@ -1,5 +1,6 @@
 #pragma once
 #include "imports.h"
+#include "server.h"
 #include "events.h"
 
 typedef struct Keyboard {

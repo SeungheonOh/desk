@@ -43,8 +43,6 @@ struct DeskServer *newServer() {
 
   ASSERTN(server->socket = wl_display_add_socket_auto(server->display));
 
-  server->windowShader = newShader("./src/shader/vert.glsl", "./src/shader/frag.glsl");
-
   return server;
 }
 
@@ -63,8 +61,8 @@ void destroyServer(struct DeskServer *server) {
   wl_display_destroy(server->display);
 }
 
-
 HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
+  LOG("new XDG surface");
 }
 HANDLE(newInput, struct wlr_input_device, DeskServer){
   switch (data->type) {
@@ -140,9 +138,9 @@ HANDLE(newOutput, struct wlr_output, DeskServer){
     wlr_output_state_set_mode(&state, mode);
   }
 
-  mkOutput(container, data);
-
-  wlr_output_layout_add_auto(container->outputLayout, data);
   wlr_output_commit_state(data, &state);
   wlr_output_state_finish(&state);
+  wlr_output_layout_add_auto(container->outputLayout, data);
+  
+  mkOutput(container, data);
 }

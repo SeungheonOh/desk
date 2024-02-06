@@ -5,6 +5,8 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   FILE *vertFile, *fragFile;
   long length;
   char *buffer;
+  int success;
+  char infoLog[512];  
 
   vertFile = fopen(vertFilePath, "r");
   ASSERT(vertFile, "Failed to load vertex shader: %s", vertFilePath);
@@ -20,8 +22,16 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   ASSERTN(fread(buffer, 1, length, vertFile));
 
   unsigned int vertex = glCreateShader(GL_VERTEX_SHADER);
-  GL_CHECK(glShaderSource(vertex, 1, (void*)buffer, NULL));
-  GL_CHECK(glCompileShader(vertex));
+  ASSERT(vertex, "Failed to create vertex shader");
+  glShaderSource(vertex, 1, (void*)&buffer, NULL);
+  glCompileShader(vertex);
+
+  glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
+  if (!success) {    
+    glGetShaderInfoLog(vertex, 512, NULL, infoLog);
+
+    EXPLODE("vertex shader failed to compile: %s", infoLog);
+  }
 
   // Fragment
   free(buffer);
@@ -31,22 +41,38 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   buffer = malloc(length);
   ASSERTN(buffer);
   ASSERTN(fread (buffer, 1, length, fragFile));
+
   unsigned int fragment = glCreateShader(GL_FRAGMENT_SHADER);
-  GL_CHECK(glShaderSource(fragment, 1, (void*)buffer, NULL));
-  GL_CHECK(glCompileShader(fragment));
+  ASSERT(fragment, "Failed to create fragment shader");  
+  glShaderSource(fragment, 1, (void*)&buffer, NULL);
+  glCompileShader(fragment);
+  
+  glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
+  if (!success) {
+    glGetShaderInfoLog(fragment, 512, NULL, infoLog);
+
+    EXPLODE("fragment shader failed to compile: %s", infoLog);
+  }  
 
   // Program
   struct shader *shader = malloc(sizeof(shader));
   shader->ID = glCreateProgram();
   glAttachShader(shader->ID, vertex);
   glAttachShader(shader->ID, fragment);
-  GL_CHECK(glLinkProgram(shader->ID));
+  glLinkProgram(shader->ID);
+
+  glGetProgramiv(shader->ID, GL_LINK_STATUS, &success);
+  if (!success) {
+    glGetProgramInfoLog(shader->ID, 512, NULL, infoLog);
+    wlr_log(WLR_ERROR, "shaders failed to link: %s", infoLog);
+  }  
 
   glDeleteShader(vertex);
   glDeleteShader(fragment);
   free(buffer);
   fclose(vertFile);
   fclose(fragFile);
+
   return shader;
 }
 

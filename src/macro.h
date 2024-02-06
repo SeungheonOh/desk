@@ -9,7 +9,8 @@
   }
 
 #define ASSERTN(expr) ASSERT(expr, "?")
-
+#define EXPLODE(s, ...) ASSERT(false, s, ##__VA_ARGS__)
+ 
 const char* eglErrVerbose(EGLint err);
 
 #define GL_CHECK(stmt) \

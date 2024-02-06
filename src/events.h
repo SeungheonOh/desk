@@ -15,15 +15,3 @@
 #define ATTACH(containerType, container, signal, name)	       \
   container->name.notify = name##Event##containerType; \
   wl_signal_add(&signal, &container->name)
-
-// DeskServer
-
-// Output
-/* LISTNER(frame, void, struct Output); */
-
-/* // Keyboard */
-/* /\* LISTNER(modifiers, void, struct Keyboard); *\/ */
-/* /\* LISTNER(key, void, struct Keyboard); *\/ */
-/* /\* LISTNER(destroy, struct wlr_keyboard_key_event, struct Keyboard); *\/ */
-
-/* LISTNER(resizeHandler, int, struct DeskServer); */

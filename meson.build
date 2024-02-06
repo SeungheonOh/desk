@@ -24,22 +24,21 @@ inc = [
 src = []
 subdir('src')
 
-executable(
-  'testa',
-  'temp/test.c',
-  dependencies: deps,
-  include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE -O'],
-  )
+# executable(
+#   'testa',
+#   'temp/test.c',
+#   dependencies: deps,
+#   include_directories: [inc, wlroots_lib],
+#   c_args: ['-DWLR_USE_UNSTABLE -O'],
+#   )
 
-executable(
-  'tiny',
-  'temp/tiny.c',
-  dependencies: deps,
-  include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE -O'],
-  )
-
+# executable(
+#   'tiny',
+#   'temp/tiny.c',
+#   dependencies: deps,
+#   include_directories: [inc, wlroots_lib],
+#   c_args: ['-DWLR_USE_UNSTABLE -O'],
+#   )
 
 executable(
   'main',
@@ -50,8 +49,7 @@ executable(
   c_args: ['-DWLR_USE_UNSTABLE -O'],
   )
 
-
-executable(
+desk = executable(
   'desk',
   'src/desk.c',
   dependencies: deps,
@@ -59,4 +57,11 @@ executable(
   include_directories: [inc, wlroots_lib],
   c_args: ['-DWLR_USE_UNSTABLE -O'],
   )
+
+run_target('ctags',
+           command : [
+               'etags',
+               '-o', '@0@/tags'.format(meson.current_source_dir()),
+           ] + [
+           ])
 

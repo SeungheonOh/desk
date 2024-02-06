@@ -42,9 +42,6 @@ typedef struct DeskServer {
   struct wl_signal resize;
   struct wl_listener resizeHandler;
 
-  // Render
-  struct shader *windowShader;
-
   int initialized;
 } DeskServer;
 
