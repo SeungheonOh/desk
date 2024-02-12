@@ -30,7 +30,8 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   if (!success) {    
     glGetShaderInfoLog(vertex, 512, NULL, infoLog);
 
-    EXPLODE("vertex shader failed to compile: %s", infoLog);
+    LOG("vertex shader failed to compile: %s", infoLog);
+    return NULL;
   }
 
   // Fragment
@@ -51,7 +52,8 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   if (!success) {
     glGetShaderInfoLog(fragment, 512, NULL, infoLog);
 
-    EXPLODE("fragment shader failed to compile: %s", infoLog);
+    LOG("fragment shader failed to compile: %s", infoLog);
+    return NULL;
   }  
 
   // Program
@@ -73,11 +75,23 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   fclose(vertFile);
   fclose(fragFile);
 
+  shader->fragFile = fragFilePath;
+  shader->vertFile = vertFilePath;  
+
   return shader;
+}
+
+void reloadShader(struct shader *shader) {
+  struct shader *relpacement;
+  glDeleteProgram(shader->ID);
+  relpacement = newShader(shader->vertFile, shader->fragFile);
+  free(shader);    
+  shader = relpacement;
 }
 
 void destroyShader(struct shader *shader) {
   glDeleteProgram(shader->ID);
+  free(shader);
 }
 
 void useShader(struct shader *shader) {

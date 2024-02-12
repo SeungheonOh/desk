@@ -25,7 +25,9 @@ void destroyOutput(struct Output *container){
 }
 
 HANDLE(frame, void, Output) {
-  wlr_output_attach_render(container->wlr_output, NULL);  
+  //if(!wl_list_empty(&container->server->views)) LOG("nothing to render");
+  
+  wlr_output_attach_render(container->wlr_output, NULL);
   wlr_renderer_begin(container->server->renderer, container->wlr_output->width, container->wlr_output->height);
 
   glClearColor(0.2f, 0.2f, 0.2f, 1.0f);
@@ -47,6 +49,7 @@ HANDLE(frame, void, Output) {
   GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
   useShader(container->windowShader);
+  setFloat(container->windowShader, "time", container->server->foo);
 
   glVertexAttribPointer ( 0, 3, GL_FLOAT,
 			  GL_FALSE, 5 * sizeof ( GLfloat ), vVertices );

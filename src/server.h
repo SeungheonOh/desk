@@ -42,6 +42,8 @@ typedef struct DeskServer {
   struct wl_signal resize;
   struct wl_listener resizeHandler;
 
+  float foo;
+
   int initialized;
 } DeskServer;
 
@@ -59,6 +61,8 @@ LISTNER(cursorButton, struct wlr_pointer_button_event, DeskServer);
 LISTNER(cursorAxis, struct wlr_pointer_axis_event, DeskServer);
 LISTNER(cursorFrame, void, DeskServer);
 LISTNER(newOutput, struct wlr_output, DeskServer);
+
+LISTNER(resizeHandler, int, DeskServer);
 
 /* LISTNER(modifiers, void, struct Keyboard); */
 /* LISTNER(key, void, struct Keyboard); */
