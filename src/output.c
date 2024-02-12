@@ -78,3 +78,7 @@ HANDLE(destroy, struct wlr_output, Output) {
 
   destroyOutput(container);
 }
+
+void renderSurface(struct wlr_surface *surface, int x, int y, void *data) {
+  
+}
