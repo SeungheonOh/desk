@@ -9,7 +9,7 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
   ATTACH(Output, output, data->events.request_state, requestState);
   ATTACH(Output, output, data->events.destroy, destroy);
 
-  output->windowShader = newShader("./src/shader/vert_flat.glsl", "./src/shader/frag_flat.glsl");      
+  output->windowShader = newShader("./src/shader/vert_flat.glsl", "./src/shader/frag_flat.glsl");
 
   wl_list_insert(&container->outputs, &output->link);
 
@@ -26,7 +26,12 @@ void destroyOutput(struct Output *container){
 
 HANDLE(frame, void, Output) {
   //if(!wl_list_empty(&container->server->views)) LOG("nothing to render");
-  
+  struct View *e;
+  int i = 0;
+  wl_list_for_each(e, &container->server->views, link) {
+    LOG("%d", ++i);
+  }
+
   wlr_output_attach_render(container->wlr_output, NULL);
   wlr_renderer_begin(container->server->renderer, container->wlr_output->width, container->wlr_output->height);
 
@@ -58,15 +63,15 @@ HANDLE(frame, void, Output) {
 			  GL_FALSE, 5 * sizeof ( GLfloat ), &vVertices[3] );
 
   glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);  
+  glEnableVertexAttribArray(1);
 
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
 
   glDisableVertexAttribArray(0);
-  glDisableVertexAttribArray(1);  
-  
+  glDisableVertexAttribArray(1);
+
   wlr_renderer_end(container->server->renderer);
-  wlr_output_commit(container->wlr_output); 
+  wlr_output_commit(container->wlr_output);
 }
 
 HANDLE(requestState, struct wlr_output, Output) {
@@ -79,6 +84,6 @@ HANDLE(destroy, struct wlr_output, Output) {
   destroyOutput(container);
 }
 
-void renderSurface(struct wlr_surface *surface, int x, int y, void *data) {
-  
-}
+/* void renderSurface(struct wlr_surface *surface, int x, int y, void *data) { */
+
+/* } */

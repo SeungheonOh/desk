@@ -11,7 +11,7 @@
 typedef struct View {
   struct DeskServer *server;
   struct wl_list link;
-  struct wlr_xdg_toplevel *xdgToplevel;  
+  struct wlr_xdg_toplevel *xdgToplevel;
   struct wl_listener map;
   struct wl_listener unmap;
   struct wl_listener destroy;
@@ -24,7 +24,7 @@ typedef struct View {
 } View;
 
 struct View *mkView(struct DeskServer*, struct wlr_xdg_surface*);
-void destryView(struct View *);
+void destroyView(struct View *);
 
 LISTNER(map, void, View)
 LISTNER(unmap, void, View)

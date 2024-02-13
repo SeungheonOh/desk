@@ -1,12 +1,11 @@
 #include "shader.h"
 
 struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
-  LOG("Loading shader from \"%s\" and \"%s\"", vertFilePath, fragFilePath);
   FILE *vertFile, *fragFile;
   long length;
   char *buffer;
   int success;
-  char infoLog[512];  
+  char infoLog[512];
 
   vertFile = fopen(vertFilePath, "r");
   ASSERT(vertFile, "Failed to load vertex shader: %s", vertFilePath);
@@ -17,7 +16,8 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   fseek (vertFile, 0, SEEK_END);
   length = ftell (vertFile);
   fseek (vertFile, 0, SEEK_SET);
-  buffer = malloc(length);
+  buffer = malloc(++length);
+  memset(buffer, 0, length);
   ASSERTN(buffer);
   ASSERTN(fread(buffer, 1, length, vertFile));
 
@@ -27,34 +27,36 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   glCompileShader(vertex);
 
   glGetShaderiv(vertex, GL_COMPILE_STATUS, &success);
-  if (!success) {    
+  if (!success) {
     glGetShaderInfoLog(vertex, 512, NULL, infoLog);
 
     LOG("vertex shader failed to compile: %s", infoLog);
     return NULL;
   }
 
-  // Fragment
   free(buffer);
+
+  // Fragment
   fseek (fragFile, 0, SEEK_END);
   length = ftell (fragFile);
   fseek (fragFile, 0, SEEK_SET);
-  buffer = malloc(length);
+  buffer = malloc(++length);
+  memset(buffer, 0, length);
   ASSERTN(buffer);
   ASSERTN(fread (buffer, 1, length, fragFile));
 
   unsigned int fragment = glCreateShader(GL_FRAGMENT_SHADER);
-  ASSERT(fragment, "Failed to create fragment shader");  
+  ASSERT(fragment, "Failed to create fragment shader");
   glShaderSource(fragment, 1, (void*)&buffer, NULL);
   glCompileShader(fragment);
-  
+
   glGetShaderiv(fragment, GL_COMPILE_STATUS, &success);
   if (!success) {
     glGetShaderInfoLog(fragment, 512, NULL, infoLog);
 
     LOG("fragment shader failed to compile: %s", infoLog);
     return NULL;
-  }  
+  }
 
   // Program
   struct shader *shader = malloc(sizeof(shader));
@@ -67,7 +69,7 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   if (!success) {
     glGetProgramInfoLog(shader->ID, 512, NULL, infoLog);
     wlr_log(WLR_ERROR, "shaders failed to link: %s", infoLog);
-  }  
+  }
 
   glDeleteShader(vertex);
   glDeleteShader(fragment);
@@ -76,17 +78,19 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   fclose(fragFile);
 
   shader->fragFile = fragFilePath;
-  shader->vertFile = vertFilePath;  
+  shader->vertFile = vertFilePath;
+
+  LOG("Loaded shader from \"%s\" and \"%s\"", vertFilePath, fragFilePath);
 
   return shader;
 }
 
 void reloadShader(struct shader *shader) {
-  struct shader *relpacement;
+  struct shader *replacement = newShader(shader->vertFile, shader->fragFile);
+  if(!replacement) return;
   glDeleteProgram(shader->ID);
-  relpacement = newShader(shader->vertFile, shader->fragFile);
-  free(shader);    
-  shader = relpacement;
+  shader->ID = replacement->ID;
+  free(replacement);
 }
 
 void destroyShader(struct shader *shader) {

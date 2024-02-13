@@ -2,6 +2,7 @@
 #include "imports.h"
 #include "server.h"
 #include "events.h"
+#include "view.h"
 #include <time.h>
 #include <math.h>
 
