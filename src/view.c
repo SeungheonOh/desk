@@ -11,6 +11,8 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
   ATTACH(View, view, data->surface->events.unmap, unmap);
   ATTACH(View, view, data->surface->events.destroy, destroy);
   //  ATTACH(View, view, data->surface->events.map, map);
+
+  return view;
 }
 void destroyView(struct View *container){
 }

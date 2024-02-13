@@ -69,7 +69,9 @@ void destroyServer(struct DeskServer *server) {
 
 HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
   LOG("new XDG surface");
-  mkView(container, data);
+  struct View *newView = mkView(container, data);
+  newView->x = 20;
+  newView->y = 20;  
 }
 HANDLE(newInput, struct wlr_input_device, DeskServer){
   switch (data->type) {

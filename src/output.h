@@ -2,6 +2,7 @@
 #include "imports.h"
 #include "server.h"
 #include "events.h"
+#include "config.h"
 #include "view.h"
 #include <time.h>
 #include <math.h>
@@ -23,3 +24,10 @@ void destroyOutput(struct Output *);
 LISTNER(frame, void, Output);
 LISTNER(requestState, struct wlr_output, Output);
 LISTNER(destroy, struct wlr_output, Output);
+
+struct RenderContext {
+  struct Output *output;
+  struct View *view;
+};
+
+void renderSurfaceIter(struct wlr_surface *, int, int, void *);

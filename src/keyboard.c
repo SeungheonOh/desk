@@ -9,7 +9,7 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
   const xkb_keysym_t *syms;
   int nsyms = xkb_state_key_get_syms(container->wlr_keyboard->xkb_state, keycode, &syms);
   for(int i = 0; i < nsyms; i++) {
-    if(syms[i] == XKB_KEY_Escape) {
+    if(syms[i] == XKB_KEY_Escape || syms[i] == XKB_KEY_q) {
       wl_display_terminate((container->server)->display);
       return;
     }

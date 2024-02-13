@@ -69,6 +69,8 @@ struct shader* newShader(const char* vertFilePath, const char* fragFilePath) {
   if (!success) {
     glGetProgramInfoLog(shader->ID, 512, NULL, infoLog);
     wlr_log(WLR_ERROR, "shaders failed to link: %s", infoLog);
+
+    return NULL;
   }
 
   glDeleteShader(vertex);
@@ -108,4 +110,8 @@ void setInt(struct shader *shader, const char* loc, int val) {
 
 void setFloat(struct shader *shader, const char* loc, float val) {
   glUniform1f(glGetUniformLocation(shader->ID, loc), val);
+}
+
+void set4fv(struct shader *shader, const char* loc, GLsizei count, GLboolean transpose, float *val) {
+  glUniformMatrix4fv(glGetUniformLocation(shader->ID, loc), count, transpose, val);
 }
