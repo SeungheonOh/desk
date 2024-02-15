@@ -207,7 +207,7 @@ void renderSurface(struct wlr_surface *surface, int x, int y, void* data) {
   wlr_surface_get_extends(surface, &surfaceBox);
 
   printf("surface location: %d, %d, %d, %d\n", surfaceBox.x, surfaceBox.y, surfaceBox.width, surfaceBox.height);
-  printf("foobar %d, %d\n", width, height);  
+  printf("foobar %d, %d\n", width, height);
 
   struct wlr_gles2_texture_attribs attrs;
   wlr_gles2_texture_get_attribs(stexture, &attrs);
@@ -261,11 +261,11 @@ void renderSurface(struct wlr_surface *surface, int x, int y, void* data) {
   rot += PI/720;
 
   glm_translate(trans, (float[3]){(float)box.x, (float)box.y, 0.0f});
-  glm_translate(trans, (float[3]){(float)box.width/2, (float)box.height/2 , 0.0f});      
+  glm_translate(trans, (float[3]){(float)box.width/2, (float)box.height/2 , 0.0f});
 
-  glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);  
+  glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);
   glm_translate(trans, (float[3]){x, y, 0.0f});
-  glm_translate(trans, (float[3]){-(float)box.width/2, -(float)box.height/2 , 0.0f});    
+  glm_translate(trans, (float[3]){-(float)box.width/2, -(float)box.height/2 , 0.0f});
 
   glm_scale(trans, (float[3]) {(float)surface->current.width, (float)surface->current.height, 1.0f});
 
@@ -434,6 +434,7 @@ static void output_request_state(struct wl_listener *listener, void *data) {
    * when the output window is resized. */
   struct tinywl_output *output = wl_container_of(listener, output, request_state);
   const struct wlr_output_event_request_state *event = data;
+  printf("==========================REQUEST STATE\n");
   wlr_output_commit_state(output->wlr_output, event->state);
 }
 
@@ -553,7 +554,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
 
   const char *fragmentShaderSource =
     "#version 300 es                                     \n"
-    "precision mediump faaloat;                            \n"
+    "precision mediump float;                            \n"
     "in vec2 v_texCoord;                                 \n"
     "layout(location = 0) out vec4 outColor;             \n"
     "uniform sampler2D s_texture;                        \n"
@@ -580,7 +581,7 @@ static void server_new_output(struct wl_listener *listener, void *data) {
   glCompileShader(fragmentShader);
   // check for shader compile errors
   glGetShaderiv(fragmentShader, GL_COMPILE_STATUS, &success);
-  
+
   if (!success) {
     glGetShaderInfoLog(fragmentShader, 512, NULL, infoLog);
     wlr_log(WLR_ERROR, "fragment shader failed to compile: %s", infoLog);

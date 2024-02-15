@@ -70,8 +70,8 @@ void destroyServer(struct DeskServer *server) {
 HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
   LOG("new XDG surface");
   struct View *newView = mkView(container, data);
-  newView->x = 20;
-  newView->y = 20;  
+  newView->x = 0;
+  newView->y = 0;
 }
 HANDLE(newInput, struct wlr_input_device, DeskServer){
   switch (data->type) {
@@ -122,13 +122,14 @@ HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_event, DeskServer){
 HANDLE(cursorButton, struct wlr_pointer_button_event, DeskServer){
 }
 HANDLE(cursorAxis, struct wlr_pointer_axis_event, DeskServer){
+  LOG("CURSOR AXIS EVENT");
   int *param = malloc(sizeof(int));
   static int counter = 0;
   if(data->orientation == WLR_AXIS_ORIENTATION_VERTICAL)
     counter -= data->delta;
   else
-    counter += data->delta;  
-  
+    counter += data->delta;
+
   *param = counter;
 
   wl_signal_emit_mutable(&container->resize, param);
@@ -155,13 +156,11 @@ HANDLE(newOutput, struct wlr_output, DeskServer){
   wlr_output_commit_state(data, &state);
   wlr_output_state_finish(&state);
   wlr_output_layout_add_auto(container->outputLayout, data);
-  
+
   mkOutput(container, data);
 }
 
 
 HANDLE(resizeHandler, int, DeskServer) {
-  LOG("a %d", *data);
-
   container->foo = *data * 0.1;
 }

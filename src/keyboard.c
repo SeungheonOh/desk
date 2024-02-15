@@ -17,7 +17,14 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
     if(syms[i] == XKB_KEY_a && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running kitty");
       if (fork() == 0) {
-	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty &> /dev/null", (void *)NULL);
+	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#mpv -- Big_Buck_Bunny_1080_10s_5MB.mp4 --loop", (void *)NULL);
+	//execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);
+      }
+    }
+    if(syms[i] == XKB_KEY_b && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+      LOG("running kitty");
+      if (fork() == 0) {
+	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);
       }
     }
 

@@ -40,14 +40,14 @@ subdir('src')
 #   c_args: ['-DWLR_USE_UNSTABLE -O'],
 #   )
 
-#executable(
-#  'main',
-#  'temp/main.c',
-#  dependencies: deps,
-#  sources: src,
-#  include_directories: [inc, wlroots_lib],
-#  c_args: ['-DWLR_USE_UNSTABLE -O'],
-#  )
+executable(
+  'main',
+  'temp/main.c',
+  dependencies: deps,
+  sources: src,
+  include_directories: [inc, wlroots_lib],
+  c_args: ['-DWLR_USE_UNSTABLE -O'],
+  )
 
 desk = executable(
   'desk',

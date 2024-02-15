@@ -22,7 +22,7 @@ struct Output *mkOutput(struct DeskServer *,struct wlr_output*);
 void destroyOutput(struct Output *);
 
 LISTNER(frame, void, Output);
-LISTNER(requestState, struct wlr_output, Output);
+LISTNER(requestState, struct wlr_output_event_request_state, Output);
 LISTNER(destroy, struct wlr_output, Output);
 
 struct RenderContext {

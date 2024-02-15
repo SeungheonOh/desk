@@ -10,7 +10,16 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
   ATTACH(View, view, data->surface->events.map, map);
   ATTACH(View, view, data->surface->events.unmap, unmap);
   ATTACH(View, view, data->surface->events.destroy, destroy);
-  //  ATTACH(View, view, data->surface->events.map, map);
+  ATTACH(View, view, data->surface->events.map, map);
+
+  struct wlr_seat *seat = container->seat;
+  struct wlr_keyboard *keyboard = wlr_seat_get_keyboard(seat);
+  wlr_xdg_toplevel_set_activated(view->xdgToplevel, true);
+
+  wlr_seat_keyboard_notify_enter(seat, view->xdgToplevel->base->surface,
+				 keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
+  wlr_seat_pointer_notify_enter(seat, view->xdgToplevel->base->surface, 0, 0);
+
 
   return view;
 }
@@ -20,7 +29,7 @@ void destroyView(struct View *container){
 HANDLE(map, void, View) {
   LOG("MAPMAPMAMPM");
   wl_list_insert(&container->server->views, &container->link);
-  wlr_xdg_toplevel_set_size(container->xdgToplevel, 720, 720);
+  wlr_xdg_toplevel_set_size(container->xdgToplevel, 500, 500);
 }
 HANDLE(unmap, void, View) {
   LOG("UNMAMAMMANNNNNNN");
