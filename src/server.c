@@ -72,6 +72,7 @@ HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
   struct View *newView = mkView(container, data);
   newView->x = 0;
   newView->y = 0;
+  newView->scale = 1;  
 }
 HANDLE(newInput, struct wlr_input_device, DeskServer){
   switch (data->type) {

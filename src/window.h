@@ -12,5 +12,6 @@ struct desk_window {
   struct wl_listener request_fullscreen;
 
   int x, y;
+  float scale;
   float theta; // in radian
 };

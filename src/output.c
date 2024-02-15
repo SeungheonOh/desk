@@ -46,6 +46,10 @@ HANDLE(frame, void, Output) {
   set4fv(container->windowShader, "view", 1, GL_FALSE, (float*)view);
   setFloat(container->windowShader, "time", container->server->foo);
 
+  static float foo = 0;
+  foo++;
+  
+
   struct View *e;
   wl_list_for_each(e, &container->server->views, link) {
     //LOG("at: %d %d", e->x, e->y);
@@ -54,6 +58,10 @@ HANDLE(frame, void, Output) {
       .output = container,
       .view = e,
     };
+
+#define ABS(a) (a>0? a:a*-1)
+    e->scale = sin(foo * 0.03) + 1;
+    setFloat(container->windowShader, "time", e->x * e->y * 0.001);    
 
     wlr_surface_for_each_surface(e->xdgToplevel->base->surface, renderSurfaceIter, &renderContext);
   }
@@ -115,28 +123,32 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   mat4 trans = GLM_MAT4_IDENTITY_INIT;
 
   //glm_translate(trans, (float[3]){(float)box.x, (float)box.y, 0.0f});
-  glm_translate(trans, (float[3]){(float)surface->current.width, (float)surface->current.height , 0.0f});
+  //glm_translate(trans, (float[3]){(float)surface->current.width, (float)surface->current.height , 0.0f});
   //glm_translate(trans, (float[3]){(float)box.width/2, (float)box.height/2 , 0.0f});
 
   //glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);
   glm_translate(trans, (float[3]){x, y, 0.0f});
+  glm_translate(trans, (float[3]){(float)ctx->view->x, (float)ctx->view->y, 0.0f});  
   //glm_translate(trans, (float[3]){-(float)box.width/2, -(float)box.height/2 , 0.0f});
 
-  glm_scale(trans, (float[3]) {(float)surface->current.width, (float)surface->current.height, 1.0f});
+  //glm_scale(trans, (float[3]) {(float)surface->current.width, (float)surface->current.height, 1.0f});
 
   set4fv(ctx->output->windowShader, "model", 1, GL_FALSE, trans);
 
+  float width = (float)surface->current.width * ctx->view->scale;
+  float height = (float)surface->current.height * ctx->view->scale;  
+
   GLfloat vVertices[] = {
-    0,  1, 0.0f,  // Position 0
+    0,  height, 0.0f,  // Position 0
     0.0f,  1.0f,  // TexCoord 0
 
     0,  0, 0.0f,  // Position 1
     0.0f,  0.0f,  // TexCoord 1
 
-    1,  0, 0.0f,  // Position 2
+    width,  0, 0.0f,  // Position 2
     1.0f,  0.0f,  // TexCoord 2
 
-    1,  1, 0.0f,  // Position 3
+    width,  height, 0.0f,  // Position 3
     1.0f,  1.0f   // TexCoord 3
   };
   GLushort indices[] = { 0, 1, 2, 0, 2, 3 };

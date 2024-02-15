@@ -21,6 +21,7 @@ typedef struct View {
   struct wl_listener requestFullscreen;
 
   int x, y;
+  float scale;
 } View;
 
 struct View *mkView(struct DeskServer*, struct wlr_xdg_surface*);
