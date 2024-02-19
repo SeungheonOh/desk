@@ -29,7 +29,7 @@ void destroyView(struct View *container){
 HANDLE(map, void, View) {
   LOG("MAPMAPMAMPM");
   wl_list_insert(&container->server->views, &container->link);
-  wlr_xdg_toplevel_set_size(container->xdgToplevel, 500, 500);
+  wlr_xdg_toplevel_set_size(container->xdgToplevel, 720, 480);
 }
 HANDLE(unmap, void, View) {
   LOG("UNMAMAMMANNNNNNN");

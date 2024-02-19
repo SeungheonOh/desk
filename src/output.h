@@ -16,6 +16,8 @@ typedef struct Output {
   struct wl_listener destroy;
 
   struct shader *windowShader;
+
+  GLint uiTexture;
 } Output;
 
 struct Output *mkOutput(struct DeskServer *,struct wlr_output*);
