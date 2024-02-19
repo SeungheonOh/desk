@@ -81,27 +81,7 @@ HANDLE(frame, void, Output) {
   cairo_t *uiCtx = cairo_create(ui);
   cairo_text_extents_t extents;
 
-  const char *utf8 = "cairo";
-
-  cairo_set_source_rgba(uiCtx, 1, 1, 1, 0);
-  cairo_paint(uiCtx);
-
-  cairo_select_font_face (uiCtx, "Sans",
-    CAIRO_FONT_SLANT_NORMAL,
-    CAIRO_FONT_WEIGHT_NORMAL);
-
-  cairo_set_source_rgba(uiCtx, 0, 0, 0, 1);
-  cairo_set_font_size (uiCtx, 100.0);
-  cairo_text_extents (uiCtx, utf8, &extents);
-
-  double x=500;
-  double y=600;
-
-  cairo_move_to (uiCtx, x,y);
-  cairo_show_text (uiCtx, utf8);
-
-
-  x=25.6,  y=128.0;
+  double x=25.6,  y=128.0;
   double x1=102.4, y1=230.4,
     x2=153.6, y2=25.6,
     x3=230.4, y3=128.0;
@@ -132,6 +112,7 @@ HANDLE(frame, void, Output) {
   cairo_arc (uiCtx, container->server->cursor->x, container->server->cursor->y, 1.0, 0, 2*M_PI);
   cairo_stroke (uiCtx);
 
+  LOG("2: %d %d", container->server->sx, container->server->sy);    
   if(container->server->sx != -1 && container->server->sy != -1) {
     cairo_set_source_rgba (uiCtx, 1, 0, 0, 0.3);        
     cairo_line_to(uiCtx, container->server->sx, container->server->sy);
@@ -141,6 +122,25 @@ HANDLE(frame, void, Output) {
     cairo_fill(uiCtx);
   }
 
+  const char utf8[100];
+  sprintf(utf8, "%.0f %.0f", container->server->cursor->x, container->server->cursor->y);
+
+  cairo_set_source_rgba(uiCtx, 1, 1, 1, 0);
+  cairo_paint(uiCtx);
+
+  cairo_select_font_face (uiCtx, "Sans",
+    CAIRO_FONT_SLANT_NORMAL,
+    CAIRO_FONT_WEIGHT_NORMAL);
+
+  cairo_set_source_rgba(uiCtx, 0, 0, 0, 1);
+  cairo_set_font_size (uiCtx, 100.0);
+  cairo_text_extents (uiCtx, utf8, &extents);
+
+  x=500;
+  y=600;
+
+  cairo_move_to (uiCtx, x,y);
+  cairo_show_text (uiCtx, utf8);  
 
   cairo_surface_flush(ui);
 
