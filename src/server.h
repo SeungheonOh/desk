@@ -45,6 +45,9 @@ typedef struct DeskServer {
   float foo;
 
   int initialized;
+
+  float x,y;
+  float sx, sy;  
 } DeskServer;
 
 struct DeskServer *newServer();
@@ -56,7 +59,7 @@ LISTNER(newInput, struct wlr_input_device, DeskServer);
 LISTNER(requestCursor, struct wlr_seat_pointer_request_set_cursor_event, DeskServer);
 LISTNER(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskServer);
 LISTNER(cursorMotion, struct wlr_pointer_motion_event, DeskServer);
-LISTNER(cursorMotionAbsolute, struct wlr_pointer_motion_event, DeskServer);
+LISTNER(cursorMotionAbsolute, struct wlr_pointer_motion_absolute_event, DeskServer);
 LISTNER(cursorButton, struct wlr_pointer_button_event, DeskServer);
 LISTNER(cursorAxis, struct wlr_pointer_axis_event, DeskServer);
 LISTNER(cursorFrame, void, DeskServer);

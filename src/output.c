@@ -127,6 +127,20 @@ HANDLE(frame, void, Output) {
   cairo_set_line_width (uiCtx, 10.0);
   cairo_stroke (uiCtx);
 
+  cairo_new_path(uiCtx);  
+  cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);    
+  cairo_arc (uiCtx, container->server->cursor->x, container->server->cursor->y, 1.0, 0, 2*M_PI);
+  cairo_stroke (uiCtx);
+
+  if(container->server->sx != -1 && container->server->sy != -1) {
+    cairo_set_source_rgba (uiCtx, 1, 0, 0, 0.3);        
+    cairo_line_to(uiCtx, container->server->sx, container->server->sy);
+    cairo_line_to(uiCtx, container->server->sx, container->server->cursor->y);
+    cairo_line_to(uiCtx, container->server->cursor->x, container->server->cursor->y);
+    cairo_line_to(uiCtx, container->server->cursor->x, container->server->sy);
+    cairo_fill(uiCtx);
+  }
+
 
   cairo_surface_flush(ui);
 
@@ -304,4 +318,7 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
   wlr_surface_send_frame_done(surface, &now);
+}
+
+void renderUI(struct Output *output) {
 }

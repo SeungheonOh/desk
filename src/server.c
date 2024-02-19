@@ -48,6 +48,10 @@ struct DeskServer *newServer() {
   ATTACH(DeskServer, server, server->resize, resizeHandler);
 
   server->foo = 0;
+  server->x = 0;
+  server->y = 0;
+  server->sx = -1;
+  server->sy = -1;  
 
   return server;
 }
@@ -70,7 +74,9 @@ void destroyServer(struct DeskServer *server) {
 HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
   LOG("new XDG surface");
   struct View *newView = mkView(container, data);
-  newView->x = 500;
+  static int x = 0;
+  x += 500;
+  newView->x = x;
   newView->y = 0;
   newView->scale = 1;
 }
@@ -115,12 +121,28 @@ HANDLE(newInput, struct wlr_input_device, DeskServer){
 HANDLE(requestCursor, struct wlr_seat_pointer_request_set_cursor_event, DeskServer){
 }
 HANDLE(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskServer){
+  LOG("asrta");
 }
 HANDLE(cursorMotion, struct wlr_pointer_motion_event, DeskServer){
+  container->x += data->delta_x;
+  container->y += data->delta_y;  
+  wlr_seat_pointer_notify_motion(container->seat, data->time_msec, container->x, container->y);
 }
-HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_event, DeskServer){
+HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_absolute_event, DeskServer){
+  wlr_cursor_warp_absolute(container->cursor, &data->pointer->base, data->x, data->y);  
 }
 HANDLE(cursorButton, struct wlr_pointer_button_event, DeskServer){
+  if(data->button == BTN_LEFT && data->state == WLR_BUTTON_PRESSED) {
+    LOG("SELECT");
+    container->sx = container->cursor->x;
+    container->sy = container->cursor->y;    
+  }
+
+  if(data->button == BTN_LEFT && data->state == WLR_BUTTON_RELEASED) {
+    LOG("SELECT No");    
+    container->sx = -1;
+    container->sy = -1;        
+  }  
 }
 HANDLE(cursorAxis, struct wlr_pointer_axis_event, DeskServer){
   LOG("CURSOR AXIS EVENT");
