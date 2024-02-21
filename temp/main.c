@@ -1020,7 +1020,7 @@ int main(int argc, char *argv[]) {
     //execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#mpv -- checker.jpg --loop", (void *)NULL);
     //execl("/bin/sh", "/bin/sh", "-c", "./wleird-resize-loop", (void *)NULL);
     //execl("/bin/sh", "/bin/sh", "-c", "./wleird-subsurfaces", (void *)NULL);
-    execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);
+    execl("./wleird-subsurfaces", (void *)NULL);
     //execl("/bin/sh", "/bin/sh", "-c", "./build/test_alactritty", (void *)NULL);
   }
 

@@ -33,6 +33,9 @@ HANDLE(frame, void, Output) {
   wlr_output_attach_render(container->wlr_output, NULL);
   wlr_renderer_begin(container->server->renderer, container->wlr_output->width, container->wlr_output->height);
 
+  /* glEnable(GL_SCISSOR_TEST); */
+  /* glScissor(1,1, 500, 500); */
+  
   glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -47,6 +50,14 @@ HANDLE(frame, void, Output) {
   set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)proj);
   set4fv(container->windowShader, "view", 1, GL_FALSE, (float*)view);
   setFloat(container->windowShader, "time", container->server->foo);
+
+  cairo_surface_t *ui =
+    cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
+			       container->wlr_output->width,
+			       container->wlr_output->height);
+  if(!ui) EXPLODE("Failed to create caior surface");
+
+  cairo_t *uiCtx = cairo_create(ui);  
 
   static float foo = 0;
   foo++;
@@ -64,21 +75,22 @@ HANDLE(frame, void, Output) {
     struct RenderContext renderContext = {
       .output = container,
       .view = e,
+      .width = surfaceBox.width,
+      .height = surfaceBox.height,
+      .uiCtx = uiCtx,
     };
 
     e->scale = 1; // sin(foo * 0.03) + 1;
     setFloat(container->windowShader, "time", e->x * e->y * 0.001);
 
     wlr_surface_for_each_surface(e->xdgToplevel->base->surface, renderSurfaceIter, &renderContext);
+
+    cairo_new_path(uiCtx);  
+    cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);    
+    cairo_arc (uiCtx, e->x, e->y, 5.0, 0, 2*M_PI);
+    cairo_stroke (uiCtx);    
   }
 
-  cairo_surface_t *ui =
-    cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-			       container->wlr_output->width,
-			       container->wlr_output->height);
-  if(!ui) EXPLODE("Failed to create caior surface");
-
-  cairo_t *uiCtx = cairo_create(ui);
   cairo_text_extents_t extents;
 
   double x=25.6,  y=128.0;
@@ -208,7 +220,7 @@ HANDLE(frame, void, Output) {
 
   glDisableVertexAttribArray(0);
   glDisableVertexAttribArray(1);
-
+  
   wlr_renderer_end(container->server->renderer);
   wlr_output_commit(container->wlr_output);
 }
@@ -224,6 +236,23 @@ HANDLE(destroy, struct wlr_output, Output) {
   destroyOutput(container);
 }
 
+struct point {
+  float x, y;
+};
+
+struct point rotateAbout(struct point pivot, struct point org, float rad)  {
+#define DIST(x1,y1,x2,y2) (sqrt(pow(x1-x2, 2) + pow(y1-y2, 2)))
+  float newAng = atan((pivot.y-org.y)/(pivot.x-org.x)) + rad;
+  if(pivot.x > org.x) newAng += PI;
+  float newX = pivot.x + DIST(pivot.x, pivot.y, org.x, org.y) * sin(newAng);
+  float newY = pivot.y + DIST(pivot.x, pivot.y, org.x, org.y) * cos(newAng);
+  return (struct point){.x=newX, .y=newY};
+}
+
+void printPoint(struct point p) {
+  LOG("%.1f %.1f", p.x, p.y);
+}
+
 // wlr_surface_iterator_func_t
 void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct RenderContext *ctx = (struct RenderContext*)data;
@@ -231,59 +260,116 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
 
   mat4 trans = GLM_MAT4_IDENTITY_INIT;
 
-  //glm_translate(trans, (float[3]){(float)box.x, (float)box.y, 0.0f});
-  //glm_translate(trans, (float[3]){(float)surface->current.width, (float)surface->current.height , 0.0f});
-  //glm_translate(trans, (float[3]){(float)box.width/2, (float)box.height/2 , 0.0f});
-
-  //glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);
-
-  //glm_translate(trans, (float[3]){-(float)box.width/2, -(float)box.height/2 , 0.0f});
-
-  //glm_scale(trans, (float[3]) {(float)surface->current.width, (float)surface->current.height, 1.0f});
-
-
   float width = (float)surface->current.width * ctx->view->scale;
   float height = (float)surface->current.height * ctx->view->scale;
+
+  float totalWidth = (float)ctx->width * ctx->view->scale;
+  float totalHeight = (float)ctx->height * ctx->view->scale;  
 
   float halfWidth = width / 2;
   float halfHeight = height / 2;
 
+  float halfTotalWidth = totalWidth / 2;
+  float halfTotalHeight = totalHeight / 2;
 
-  static float rot = 0;
-  rot += PI/1000;
-  glm_translate(trans, (float[3]){x, y, 0.0f});
-  glm_translate(trans, (float[3]){(float)ctx->view->x+halfWidth, (float)ctx->view->y+halfHeight, 0.0f});
-  glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);
+  float pivotX = ctx->view->x + halfTotalWidth;
+  float pivotY = ctx->view->y + halfTotalHeight;
+
+  float rot = ctx->output->server->foo;
+
+  float orgX = x + ctx->view->x;
+  float orgY = y + ctx->view->y;
+
+  struct point lt = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX, .y=orgY}, rot);
+  struct point rt = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX + width, .y=orgY}, rot);
+  struct point lb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX, .y=orgY+height}, rot);
+  struct point rb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX+width, .y=orgY+height}, rot);
+
+  printPoint(lt);
+  printPoint(rt);
+  printPoint(lb);
+  printPoint(rb);  
+
+  cairo_new_path(ctx->uiCtx);  
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 1, 0.8);    
+  cairo_arc (ctx->uiCtx, pivotX, pivotY, 5.0, 0, 2*M_PI);
+  cairo_fill (ctx->uiCtx);
+
+  cairo_new_path(ctx->uiCtx);
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
+  cairo_arc (ctx->uiCtx, lt.x, lt.y, 8.0, 0, 2*M_PI);
+  cairo_fill (ctx->uiCtx);
+  
+  cairo_new_path(ctx->uiCtx);
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
+  cairo_arc (ctx->uiCtx, rt.x, rt.y, 8.0, 0, 2*M_PI);
+  cairo_fill (ctx->uiCtx);
+  
+  cairo_new_path(ctx->uiCtx);
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
+  cairo_arc (ctx->uiCtx, lb.x, lb.y, 8.0, 0, 2*M_PI);
+  cairo_fill (ctx->uiCtx);
+
+  cairo_new_path(ctx->uiCtx);
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
+  cairo_arc (ctx->uiCtx, rb.x, rb.y, 8.0, 0, 2*M_PI);
+  cairo_fill (ctx->uiCtx);    
+  
+
+  cairo_new_path(ctx->uiCtx);
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
+  cairo_arc (ctx->uiCtx, orgX, orgY, 5.0, 0, 2*M_PI);
+  cairo_fill (ctx->uiCtx);
+
+  /* cairo_new_path(ctx->uiCtx);   */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0,  1, 0.8);     */
+  /* cairo_arc (ctx->uiCtx, x + ctx->view->x + halfWidth, y + ctx->view->y+halfHeight, 5.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx);         */
+
+
+  //glm_translate(trans, (float[3]){x, y, 0.0f});
+  //glm_translate(trans, (float[3]){(float)ctx->view->x-halfTotalWidth, (float)ctx->view->y-halfTotalHeight, 0.0f});
+  //glm_translate(trans, (float[3]){(float)ctx->view->x+halfWidth, (float)ctx->view->y+halfHeight, 0.0f});  
+  //glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);
+  
 
   set4fv(ctx->output->windowShader, "model", 1, GL_FALSE, trans);
 
+  /*
+   P0     P3
+   *------*
+   |      |
+   *------*
+   P1     P2
+   */  
 
   GLfloat vVertices[] = {
-    -halfWidth,  halfHeight, 0.0f,  // Position 0
+    lt.x,  lt.y, 0.0f,  // Position 0
     0.0f,  1.0f,  // TexCoord 0
 
-    -halfWidth,  -halfHeight, 0.0f,  // Position 1
+    lb.x,  lb.y, 0.0f,  // Position 1
     0.0f,  0.0f,  // TexCoord 1
 
-    halfWidth,  -halfHeight, 0.0f,  // Position 2
+    rb.x,  rb.y, 0.0f,  // Position 2
     1.0f,  0.0f,  // TexCoord 2
 
-    halfWidth,  halfHeight, 0.0f,  // Position 3
+    rt.x,  rt.y, 0.0f,  // Position 3
     1.0f,  1.0f   // TexCoord 3
   };
   /* GLfloat vVertices[] = { */
-  /*   0,  height, 0.0f,  // Position 0 */
+  /*   0, 0, 0.0f,  // Position 0 */
   /*   0.0f,  1.0f,  // TexCoord 0 */
 
-  /*   0,  0, 0.0f,  // Position 1 */
+  /*   0, 100, 0.0f,  // Position 1 */
   /*   0.0f,  0.0f,  // TexCoord 1 */
 
-  /*   width,  0, 0.0f,  // Position 2 */
+  /*   100, 100, 0.0f,  // Position 2 */
   /*   1.0f,  0.0f,  // TexCoord 2 */
 
-  /*   width,  height, 0.0f,  // Position 3 */
+  /*   100, 0, 0.0f,  // Position 3 */
   /*   1.0f,  1.0f   // TexCoord 3 */
   /* }; */
+
   GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
   glVertexAttribPointer ( 0, 3, GL_FLOAT,
@@ -321,4 +407,5 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
 }
 
 void renderUI(struct Output *output) {
+  
 }

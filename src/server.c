@@ -75,9 +75,9 @@ HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
   LOG("new XDG surface");
   struct View *newView = mkView(container, data);
   static int x = 0;
-  x += 500;
-  newView->x = x;
-  newView->y = 0;
+  x = 500;
+  newView->x = 100;
+  newView->y = 100;
   newView->scale = 1;
 }
 HANDLE(newInput, struct wlr_input_device, DeskServer){
@@ -185,5 +185,5 @@ HANDLE(newOutput, struct wlr_output, DeskServer){
 
 
 HANDLE(resizeHandler, int, DeskServer) {
-  container->foo = *data * 0.1;
+  container->foo = *data * 0.05;
 }

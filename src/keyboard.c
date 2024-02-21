@@ -28,7 +28,10 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
     if(syms[i] == XKB_KEY_b && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running kitty");
       if (fork() == 0) {
-	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#alacritty", (void *)NULL);
+	execl("./wleird/wleird-subsurfaces", (void *)NULL);
+	//execl("./wleird/wleird-resize-loop", (void *)NULL);
+	
+    //	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);	
       }
     }
 
