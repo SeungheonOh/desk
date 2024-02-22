@@ -28,6 +28,11 @@ void destroyOutput(struct Output *container){
 }
 
 HANDLE(frame, void, Output) {
+  struct View *v;
+  wl_list_for_each(v, &container->server->views, link) {
+    LOG("FADEIN: %f", v->fadeIn);
+    if(v->fadeIn > 0) v->fadeIn -= 0.1;
+  }
   //if(!wl_list_empty(&container->server->views)) LOG("nothing to render");
 
   wlr_output_attach_render(container->wlr_output, NULL);
@@ -84,7 +89,7 @@ HANDLE(frame, void, Output) {
       .offsetX = surfaceBox.x,
       .offsetY = surfaceBox.y,
       .uiCtx = uiCtx,
-      .depth = foo,
+      .depth = e->fadeIn,
     };
 
     e->scale = 1;
@@ -286,7 +291,7 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   float pivotX = ctx->view->x + halfTotalWidth + (float)ctx->offsetX * ctx->view->scale;
   float pivotY = ctx->view->y + halfTotalHeight + (float)ctx->offsetY * ctx->view->scale;
 
-  float rot = ctx->output->server->foo;
+  float rot = ctx->view->rot;
 
   float orgX = x + ctx->view->x;
   float orgY = y + ctx->view->y;
@@ -338,8 +343,7 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
    */
 
   static float baz = 0;
-  LOG("%d", ctx->depth);
-  float zP = ctx->depth;
+  float zP = ctx->depth * -0.5;
 
   GLfloat vVertices[] = {
     lt.x,  lt.y, zP,  // Position 0

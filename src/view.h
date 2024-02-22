@@ -21,6 +21,8 @@ typedef struct View {
   struct wl_listener requestFullscreen;
 
   int x, y;
+  float fadeIn;
+  float rot;
   float scale;
 } View;
 

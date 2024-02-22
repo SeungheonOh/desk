@@ -20,6 +20,12 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
 				 keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
   wlr_seat_pointer_notify_enter(seat, view->xdgToplevel->base->surface, 25, 25);
 
+  view->fadeIn = 1;
+
+  srand(time(NULL));
+  view->rot = (float)rand()/(float)(RAND_MAX/(2*PI));
+
+  LOG("ROT:%f", view->rot);
 
   return view;
 }
