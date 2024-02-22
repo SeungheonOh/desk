@@ -1,8 +1,14 @@
 #include "keyboard.h"
 
 HANDLE(modifiers, void, Keyboard){
+  wlr_seat_set_keyboard(container->server->seat, container->wlr_keyboard);
+  wlr_seat_keyboard_notify_modifiers(container->server->seat,
+				     &container->wlr_keyboard->modifiers);
 }
 HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
+  wlr_seat_set_keyboard(container->server->seat, container->wlr_keyboard);
+  wlr_seat_keyboard_notify_key(container->server->seat, data->time_msec,
+			       data->keycode, data->state);
   // libinput to xkb keycode
   uint32_t keycode = data->keycode + 8;
 
@@ -24,16 +30,19 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
       if (fork() == 0) {
 	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#mpv -- Big_Buck_Bunny_1080_10s_5MB.mp4 --loop 2&>1 /dev/null", (void *)NULL);
       }
+      return;
     }
     if(syms[i] == XKB_KEY_b && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running kitty");
       if (fork() == 0) {
-	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#alacritty", (void *)NULL);
-	/* execl("./wleird/wleird-subsurfaces", (void *)NULL); */
-	//execl("./wleird/wleird-resize-loop", (void *)NULL);
+	/* execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#alacritty", (void *)NULL); */
+	/* execl("./wleird/wleird-cursor", (void *)NULL); */
+
+	execl("./wleird/wleird-resize-loop", (void *)NULL);
 
     //	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);
       }
+      return;
     }
 
     if(syms[i] == XKB_KEY_r && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
@@ -48,6 +57,7 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
 
         reloadShader(e->windowShader);
       }
+      return;
     }
   }
 }

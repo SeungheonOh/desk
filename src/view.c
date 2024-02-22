@@ -18,7 +18,7 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
 
   wlr_seat_keyboard_notify_enter(seat, view->xdgToplevel->base->surface,
 				 keyboard->keycodes, keyboard->num_keycodes, &keyboard->modifiers);
-  wlr_seat_pointer_notify_enter(seat, view->xdgToplevel->base->surface, 0, 0);
+  wlr_seat_pointer_notify_enter(seat, view->xdgToplevel->base->surface, 25, 25);
 
 
   return view;
@@ -29,7 +29,7 @@ void destroyView(struct View *container){
 HANDLE(map, void, View) {
   LOG("MAPMAPMAMPM");
   wl_list_insert(&container->server->views, &container->link);
-  wlr_xdg_toplevel_set_size(container->xdgToplevel, 720, 480);
+  //wlr_xdg_toplevel_set_size(container->xdgToplevel, 720, 480);
 }
 HANDLE(unmap, void, View) {
   LOG("UNMAMAMMANNNNNNN");

@@ -84,10 +84,8 @@ HANDLE(newInput, struct wlr_input_device, DeskServer){
   switch (data->type) {
   case WLR_INPUT_DEVICE_KEYBOARD:
     struct wlr_keyboard *wlr_keyboard = wlr_keyboard_from_input_device(data);
-    ASSERTN(wlr_keyboard);
     struct Keyboard *keyboard =
       malloc(sizeof(struct Keyboard));
-    ASSERTN(keyboard);
 
     keyboard->server = container;
     keyboard->wlr_keyboard = wlr_keyboard;
@@ -117,6 +115,12 @@ HANDLE(newInput, struct wlr_input_device, DeskServer){
   default:
     break;
   }
+
+  uint32_t caps = WL_SEAT_CAPABILITY_POINTER;
+  if (!wl_list_empty(&container->keyboards)) {
+    caps |= WL_SEAT_CAPABILITY_KEYBOARD;
+  }
+  wlr_seat_set_capabilities(container->seat, caps);
 }
 HANDLE(requestCursor, struct wlr_seat_pointer_request_set_cursor_event, DeskServer){
 }
@@ -126,6 +130,8 @@ HANDLE(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskSer
 HANDLE(cursorMotion, struct wlr_pointer_motion_event, DeskServer){
   container->x += data->delta_x;
   container->y += data->delta_y;
+  wlr_cursor_move(container->cursor, &data->pointer->base,
+		  data->delta_x, data->delta_y);
   wlr_seat_pointer_notify_motion(container->seat, data->time_msec, container->x, container->y);
 }
 HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_absolute_event, DeskServer){

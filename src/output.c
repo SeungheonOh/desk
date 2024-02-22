@@ -65,13 +65,11 @@ HANDLE(frame, void, Output) {
 
   cairo_t *uiCtx = cairo_create(ui);
 
-  float foo = -6;
+  float foo = 0;
   struct View *e;
   wl_list_for_each(e, &container->server->views, link) {
 
 #define ABS(a) (a>0? a:a*-1)
-    //LOG("at: %d %d", e->x, e->y);
-
     struct wlr_box surfaceBox;
     wlr_surface_get_extends(e->xdgToplevel->base->surface, &surfaceBox);
 
@@ -98,7 +96,6 @@ HANDLE(frame, void, Output) {
     cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);
     cairo_arc (uiCtx, e->x, e->y, 5.0, 0, 2*M_PI);
     cairo_stroke (uiCtx);
-    foo++;
   }
 
   cairo_text_extents_t extents;
@@ -184,6 +181,7 @@ HANDLE(frame, void, Output) {
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, container->uiTexture);
   glUniform1i(glGetUniformLocation(container->windowShader->ID, "s_texture"), 0);
+
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -298,41 +296,36 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct point lb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX, .y=orgY+height}, rot);
   struct point rb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX+width, .y=orgY+height}, rot);
 
-  printPoint(lt);
-  printPoint(rt);
-  printPoint(lb);
-  printPoint(rb);
+  /* cairo_new_path(ctx->uiCtx); */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 1, 0.8); */
+  /* cairo_arc (ctx->uiCtx, pivotX, pivotY, 5.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx); */
 
-  cairo_new_path(ctx->uiCtx);
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 1, 0.8);
-  cairo_arc (ctx->uiCtx, pivotX, pivotY, 5.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);
+  /* cairo_new_path(ctx->uiCtx); */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
+  /* cairo_arc (ctx->uiCtx, lt.x, lt.y, 15.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx); */
 
-  cairo_new_path(ctx->uiCtx);
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (ctx->uiCtx, lt.x, lt.y, 15.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);
+  /* cairo_new_path(ctx->uiCtx); */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
+  /* cairo_arc (ctx->uiCtx, rt.x, rt.y, 8.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx); */
 
-  cairo_new_path(ctx->uiCtx);
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (ctx->uiCtx, rt.x, rt.y, 8.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);
+  /* cairo_new_path(ctx->uiCtx); */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
+  /* cairo_arc (ctx->uiCtx, lb.x, lb.y, 8.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx); */
 
-  cairo_new_path(ctx->uiCtx);
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (ctx->uiCtx, lb.x, lb.y, 8.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);
-
-  cairo_new_path(ctx->uiCtx);
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (ctx->uiCtx, rb.x, rb.y, 8.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);
+  /* cairo_new_path(ctx->uiCtx); */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
+  /* cairo_arc (ctx->uiCtx, rb.x, rb.y, 8.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx); */
 
 
-  cairo_new_path(ctx->uiCtx);
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (ctx->uiCtx, orgX, orgY, 5.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);
+  /* cairo_new_path(ctx->uiCtx); */
+  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
+  /* cairo_arc (ctx->uiCtx, orgX, orgY, 5.0, 0, 2*M_PI); */
+  /* cairo_fill (ctx->uiCtx); */
 
   set4fv(ctx->output->windowShader, "model", 1, GL_FALSE, trans);
 
@@ -380,13 +373,13 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   GLint appTexture = attrs.tex;
   GLenum appTextureTarget = attrs.target;
 
-  glActiveTexture(GL_TEXTURE0);
+  glActiveTexture(GL_TEXTURE1);
   glBindTexture(appTextureTarget, appTexture);
 
   glTexParameteri(appTextureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
   glTexParameteri(appTextureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 
-  glUniform1i(glGetUniformLocation(ctx->output->windowShader->ID, "s_texture"), 0);
+  glUniform1i(glGetUniformLocation(ctx->output->windowShader->ID, "s_texture"), 1);
 
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
 
