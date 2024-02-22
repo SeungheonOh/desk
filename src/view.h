@@ -29,6 +29,8 @@ typedef struct View {
 struct View *mkView(struct DeskServer*, struct wlr_xdg_surface*);
 void destroyView(struct View *);
 
+struct point centerPoint(struct View);
+
 LISTNER(map, void, View)
 LISTNER(unmap, void, View)
 LISTNER(destroy, void, View)
@@ -36,3 +38,4 @@ LISTNER(requestMove, void, View)
 LISTNER(requestResize, void, View)
 LISTNER(requestMaximize, void, View)
 LISTNER(requestFullscreen, void, View)
+

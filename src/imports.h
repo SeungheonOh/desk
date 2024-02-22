@@ -41,5 +41,6 @@
 #include <cglm/cam.h>
 
 #include "macro.h"
+#include "aux.h"
 
 #define PI 3.14159265358979

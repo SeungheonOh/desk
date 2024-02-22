@@ -5,5 +5,6 @@ src += files([
   'window.c',
   'view.c',  
   'output.c',
-  'keyboard.c'
+  'keyboard.c',
+  'aux.c'
 ])

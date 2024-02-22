@@ -48,10 +48,12 @@ struct DeskServer *newServer() {
   ATTACH(DeskServer, server, server->resize, resizeHandler);
 
   server->foo = 0;
+  server->bar = 0;  
   server->x = 0;
   server->y = 0;
   server->sx = -1;
   server->sy = -1;
+  server->rotationMode = 0;        
 
   return server;
 }
@@ -148,12 +150,12 @@ HANDLE(cursorButton, struct wlr_pointer_button_event, DeskServer){
     LOG("SELECT No");
     container->sx = -1;
     container->sy = -1;
-  }
+  }  
 }
 HANDLE(cursorAxis, struct wlr_pointer_axis_event, DeskServer){
   LOG("CURSOR AXIS EVENT");
   int *param = malloc(sizeof(int));
-  static int counter = 0;
+  int counter = 0;
   if(data->orientation == WLR_AXIS_ORIENTATION_VERTICAL)
     counter -= data->delta;
   else
@@ -191,7 +193,9 @@ HANDLE(newOutput, struct wlr_output, DeskServer){
 
 
 HANDLE(resizeHandler, int, DeskServer) {
-  container->foo = *data * (PI / 1000);
-  while(container->foo > 2*PI) container->foo -= 2*PI;
-  while(container->foo < 0) container->foo += 2*PI;
+  if(container->rotationMode) {    
+    container->bar += *data * (PI / 1000);
+  } else {
+    container->foo += *data * 0.01;
+  }
 }

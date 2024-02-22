@@ -27,6 +27,13 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
 void destroyView(struct View *container){
 }
 
+struct point centerPoint(struct View v) {
+  struct wlr_box surfaceBox;
+  wlr_surface_get_extends(v.xdgToplevel->base->surface, &surfaceBox);
+
+  
+}
+
 HANDLE(map, void, View) {
   LOG("MAPMAPMAMPM");
   wl_list_insert(&container->server->views, &container->link);
@@ -47,3 +54,4 @@ HANDLE(requestMaximize, void, View) {
 }
 HANDLE(requestFullscreen, void, View) {
 }
+

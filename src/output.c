@@ -252,19 +252,6 @@ HANDLE(destroy, struct wlr_output, Output) {
   destroyOutput(container);
 }
 
-struct point {
-  float x, y;
-};
-
-struct point rotateAbout(struct point pivot, struct point org, float rad)  {
-#define DIST(x1,y1,x2,y2) (sqrt(pow(x1-x2, 2) + pow(y1-y2, 2)))
-  float newAng = atan((pivot.y-org.y)/(pivot.x-org.x)) + rad;
-  if(pivot.x > org.x) newAng += PI;
-  float newX = pivot.x + DIST(pivot.x, pivot.y, org.x, org.y) * cos(newAng);
-  float newY = pivot.y + DIST(pivot.x, pivot.y, org.x, org.y) * sin(newAng);
-  return (struct point){.x=newX, .y=newY};
-}
-
 void printPoint(struct point p) {
   LOG("%.1f %.1f", p.x, p.y);
 }
@@ -272,9 +259,11 @@ void printPoint(struct point p) {
 // wlr_surface_iterator_func_t
 void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct RenderContext *ctx = (struct RenderContext*)data;
-  //LOG("%d %d %d %d", x, y, surface->current.width, surface->current.height);
 
-  mat4 trans = GLM_MAT4_IDENTITY_INIT;
+  ctx->view->scale = ctx->output->server->foo;
+
+  x *= ctx->view->scale;
+  y *= ctx->view->scale;  
 
   float width = (float)surface->current.width * ctx->view->scale;
   float height = (float)surface->current.height * ctx->view->scale;
@@ -291,7 +280,7 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   float pivotX = ctx->view->x + halfTotalWidth + (float)ctx->offsetX * ctx->view->scale;
   float pivotY = ctx->view->y + halfTotalHeight + (float)ctx->offsetY * ctx->view->scale;
 
-  float rot = ctx->output->server->foo;
+  float rot = ctx->output->server->bar;
 
   float orgX = x + ctx->view->x;
   float orgY = y + ctx->view->y;
@@ -300,39 +289,6 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct point rt = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX + width, .y=orgY}, rot);
   struct point lb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX, .y=orgY+height}, rot);
   struct point rb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX+width, .y=orgY+height}, rot);
-
-  /* cairo_new_path(ctx->uiCtx); */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 1, 0.8); */
-  /* cairo_arc (ctx->uiCtx, pivotX, pivotY, 5.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx); */
-
-  /* cairo_new_path(ctx->uiCtx); */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
-  /* cairo_arc (ctx->uiCtx, lt.x, lt.y, 15.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx); */
-
-  /* cairo_new_path(ctx->uiCtx); */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
-  /* cairo_arc (ctx->uiCtx, rt.x, rt.y, 8.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx); */
-
-  /* cairo_new_path(ctx->uiCtx); */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
-  /* cairo_arc (ctx->uiCtx, lb.x, lb.y, 8.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx); */
-
-  /* cairo_new_path(ctx->uiCtx); */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
-  /* cairo_arc (ctx->uiCtx, rb.x, rb.y, 8.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx); */
-
-
-  /* cairo_new_path(ctx->uiCtx); */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8); */
-  /* cairo_arc (ctx->uiCtx, orgX, orgY, 5.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx); */
-
-  set4fv(ctx->output->windowShader, "model", 1, GL_FALSE, trans);
 
   /*
    P0     P3
@@ -343,19 +299,27 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
    */
 
   static float baz = 0;
-  float zP = ctx->depth * -0.5;
+  float d = ctx->depth;
+
+
+#define MAX(a, b) ((a>b)?a:b)
+#define MIN(a, b) ((a<b)?a:b)  
+  float zP1 = MAX(d, 0) * -1;
+  float zP2 = MAX(d, 0) * -0.5;
+  float zP3 = MAX(d, 0) * -0.5;
+  float zP4 = MAX(d, 0) * -1;    
 
   GLfloat vVertices[] = {
-    lt.x,  lt.y, zP,  // Position 0
+    lt.x,  lt.y, zP1,  // Position 0
     0.0f,  0.0f,  // TexCoord 0
 
-    lb.x,  lb.y, zP,  // Position 1
+    lb.x,  lb.y, zP2,  // Position 1
     0.0f,  1.0f,  // TexCoord 1
 
-    rb.x,  rb.y, zP,  // Position 2
+    rb.x,  rb.y, zP3,  // Position 2
     1.0f,  1.0f,  // TexCoord 2
 
-    rt.x,  rt.y, zP,  // Position 3
+    rt.x,  rt.y, zP4,  // Position 3
     1.0f,  0.0f   // TexCoord 3
   };
 

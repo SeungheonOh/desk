@@ -43,11 +43,14 @@ typedef struct DeskServer {
   struct wl_listener resizeHandler;
 
   float foo;
+  float bar;
 
   int initialized;
 
   float x,y;
-  float sx, sy;  
+  float sx, sy;
+
+  int rotationMode;
 } DeskServer;
 
 struct DeskServer *newServer();

@@ -15,6 +15,12 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
   const xkb_keysym_t *syms;
   int nsyms = xkb_state_key_get_syms(container->wlr_keyboard->xkb_state, keycode, &syms);
   for(int i = 0; i < nsyms; i++) {
+    if(syms[i] == XKB_KEY_x  && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+      container->server->rotationMode = 1;
+    }
+    if(syms[i] == XKB_KEY_x  && data->state == WL_KEYBOARD_KEY_STATE_RELEASED) {      
+      container->server->rotationMode = 0;      
+    }
     if(syms[i] == XKB_KEY_Escape) {
       wl_display_destroy_clients(container->server->display);
       wl_display_terminate(container->server->display);
@@ -35,12 +41,12 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
     if(syms[i] == XKB_KEY_b && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running kitty");
       if (fork() == 0) {
-	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#alacritty", (void *)NULL);
-	/* execl("./wleird/wleird-cursor", (void *)NULL); */
+	//execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#alacritty", (void *)NULL);
+	/* execl("./wleird/wleird-subsurfaces", (void *)NULL); */
 
 	/* execl("./wleird/wleird-resize-loop", (void *)NULL); */
 
-    //	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);
+	execl("/bin/sh", "/bin/sh", "-c", "nix run nixpkgs#kitty", (void *)NULL);
       }
       return;
     }
