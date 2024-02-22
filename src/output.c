@@ -260,10 +260,10 @@ void printPoint(struct point p) {
 void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct RenderContext *ctx = (struct RenderContext*)data;
 
-  ctx->view->scale = ctx->output->server->foo;
+  ctx->view->scale = 1; //ctx->output->server->foo;
 
   x *= ctx->view->scale;
-  y *= ctx->view->scale;  
+  y *= ctx->view->scale;
 
   float width = (float)surface->current.width * ctx->view->scale;
   float height = (float)surface->current.height * ctx->view->scale;
@@ -279,6 +279,10 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
 
   float pivotX = ctx->view->x + halfTotalWidth + (float)ctx->offsetX * ctx->view->scale;
   float pivotY = ctx->view->y + halfTotalHeight + (float)ctx->offsetY * ctx->view->scale;
+
+  struct point o = dilateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=x, .y=y}, ctx->view->scale);
+  /* x = o.x; */
+  /* y = o.y; */
 
   float rot = ctx->output->server->bar;
 
@@ -305,8 +309,8 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
 #define MAX(a, b) ((a>b)?a:b)
 #define MIN(a, b) ((a<b)?a:b)  
   float zP1 = MAX(d, 0) * -1;
-  float zP2 = MAX(d, 0) * -0.5;
-  float zP3 = MAX(d, 0) * -0.5;
+  float zP2 = MAX(d, 0) * -1;
+  float zP3 = MAX(d, 0) * -1;
   float zP4 = MAX(d, 0) * -1;    
 
   GLfloat vVertices[] = {

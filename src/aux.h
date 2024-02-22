@@ -8,3 +8,4 @@ struct point {
 
 // Rotate a point about a pivot given radian amount.
 struct point rotateAbout(struct point, struct point, float);
+struct point dilateAbout(struct point, struct point, float);
