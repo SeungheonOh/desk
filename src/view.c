@@ -22,11 +22,6 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
 
   view->fadeIn = 1;
 
-  srand(time(NULL));
-  view->rot = (float)rand()/(float)(RAND_MAX/(2*PI));
-
-  LOG("ROT:%f", view->rot);
-
   return view;
 }
 void destroyView(struct View *container){

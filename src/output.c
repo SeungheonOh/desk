@@ -291,7 +291,7 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   float pivotX = ctx->view->x + halfTotalWidth + (float)ctx->offsetX * ctx->view->scale;
   float pivotY = ctx->view->y + halfTotalHeight + (float)ctx->offsetY * ctx->view->scale;
 
-  float rot = ctx->view->rot;
+  float rot = ctx->output->server->foo;
 
   float orgX = x + ctx->view->x;
   float orgY = y + ctx->view->y;
