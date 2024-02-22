@@ -51,7 +51,7 @@ struct DeskServer *newServer() {
   server->x = 0;
   server->y = 0;
   server->sx = -1;
-  server->sy = -1;  
+  server->sy = -1;
 
   return server;
 }
@@ -125,24 +125,24 @@ HANDLE(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskSer
 }
 HANDLE(cursorMotion, struct wlr_pointer_motion_event, DeskServer){
   container->x += data->delta_x;
-  container->y += data->delta_y;  
+  container->y += data->delta_y;
   wlr_seat_pointer_notify_motion(container->seat, data->time_msec, container->x, container->y);
 }
 HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_absolute_event, DeskServer){
-  wlr_cursor_warp_absolute(container->cursor, &data->pointer->base, data->x, data->y);  
+  wlr_cursor_warp_absolute(container->cursor, &data->pointer->base, data->x, data->y);
 }
 HANDLE(cursorButton, struct wlr_pointer_button_event, DeskServer){
   if(data->button == BTN_LEFT && data->state == WLR_BUTTON_PRESSED) {
     LOG("SELECT");
     container->sx = container->cursor->x;
-    container->sy = container->cursor->y;    
+    container->sy = container->cursor->y;
   }
 
   if(data->button == BTN_LEFT && data->state == WLR_BUTTON_RELEASED) {
-    LOG("SELECT No");    
+    LOG("SELECT No");
     container->sx = -1;
-    container->sy = -1;        
-  }  
+    container->sy = -1;
+  }
 }
 HANDLE(cursorAxis, struct wlr_pointer_axis_event, DeskServer){
   LOG("CURSOR AXIS EVENT");
@@ -185,5 +185,7 @@ HANDLE(newOutput, struct wlr_output, DeskServer){
 
 
 HANDLE(resizeHandler, int, DeskServer) {
-  container->foo = *data * 0.05;
+  container->foo = *data * (PI / 1000);
+  while(container->foo > 2*PI) container->foo -= 2*PI;
+  while(container->foo < 0) container->foo += 2*PI;
 }

@@ -30,7 +30,7 @@ LISTNER(destroy, struct wlr_output, Output);
 struct RenderContext {
   struct Output *output;
   struct View *view;
-  int width, height;
+  int width, height, offsetX, offsetY, depth;
   cairo_t *uiCtx;
 };
 

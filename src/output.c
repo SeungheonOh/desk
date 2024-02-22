@@ -35,7 +35,7 @@ HANDLE(frame, void, Output) {
 
   /* glEnable(GL_SCISSOR_TEST); */
   /* glScissor(1,1, 500, 500); */
-  
+
   glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
 
@@ -44,7 +44,13 @@ HANDLE(frame, void, Output) {
   mat4 proj = GLM_MAT4_IDENTITY_INIT;
   mat4 view = GLM_MAT4_IDENTITY_INIT;
   mat4 trans = GLM_MAT4_IDENTITY_INIT;
-  glm_ortho(0, container->wlr_output->width, 0, container->wlr_output->height, 0.00001f, 10000.0f, proj);
+
+  mat4 pers = GLM_MAT4_IDENTITY_INIT;
+  mat4 ndc = GLM_MAT4_IDENTITY_INIT;
+
+  glm_perspective((PI/180)*90, container->wlr_output->width /container->wlr_output->height, 0, 10.0f, pers);
+  glm_ortho(0, container->wlr_output->width, 0, container->wlr_output->height, 0, 20.0f, ndc);
+  glm_mat4_mul(pers,ndc,proj);
   //glm_ortho(-1, 1, -1, 1, 0.00001f, 10000.0f, proj);
 
   set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)proj);
@@ -57,12 +63,12 @@ HANDLE(frame, void, Output) {
 			       container->wlr_output->height);
   if(!ui) EXPLODE("Failed to create caior surface");
 
-  cairo_t *uiCtx = cairo_create(ui);  
+  cairo_t *uiCtx = cairo_create(ui);
 
-  static float foo = 0;
-  foo++;
+  float foo = -6;
   struct View *e;
   wl_list_for_each(e, &container->server->views, link) {
+
 #define ABS(a) (a>0? a:a*-1)
     //LOG("at: %d %d", e->x, e->y);
 
@@ -77,18 +83,22 @@ HANDLE(frame, void, Output) {
       .view = e,
       .width = surfaceBox.width,
       .height = surfaceBox.height,
+      .offsetX = surfaceBox.x,
+      .offsetY = surfaceBox.y,
       .uiCtx = uiCtx,
+      .depth = foo,
     };
 
-    e->scale = 1; // sin(foo * 0.03) + 1;
+    e->scale = 1;
     setFloat(container->windowShader, "time", e->x * e->y * 0.001);
 
     wlr_surface_for_each_surface(e->xdgToplevel->base->surface, renderSurfaceIter, &renderContext);
 
-    cairo_new_path(uiCtx);  
-    cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);    
+    cairo_new_path(uiCtx);
+    cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);
     cairo_arc (uiCtx, e->x, e->y, 5.0, 0, 2*M_PI);
-    cairo_stroke (uiCtx);    
+    cairo_stroke (uiCtx);
+    foo++;
   }
 
   cairo_text_extents_t extents;
@@ -119,14 +129,13 @@ HANDLE(frame, void, Output) {
   cairo_set_line_width (uiCtx, 10.0);
   cairo_stroke (uiCtx);
 
-  cairo_new_path(uiCtx);  
-  cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);    
+  cairo_new_path(uiCtx);
+  cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);
   cairo_arc (uiCtx, container->server->cursor->x, container->server->cursor->y, 1.0, 0, 2*M_PI);
   cairo_stroke (uiCtx);
 
-  LOG("2: %d %d", container->server->sx, container->server->sy);    
   if(container->server->sx != -1 && container->server->sy != -1) {
-    cairo_set_source_rgba (uiCtx, 1, 0, 0, 0.3);        
+    cairo_set_source_rgba (uiCtx, 1, 0, 0, 0.3);
     cairo_line_to(uiCtx, container->server->sx, container->server->sy);
     cairo_line_to(uiCtx, container->server->sx, container->server->cursor->y);
     cairo_line_to(uiCtx, container->server->cursor->x, container->server->cursor->y);
@@ -152,7 +161,7 @@ HANDLE(frame, void, Output) {
   y=600;
 
   cairo_move_to (uiCtx, x,y);
-  cairo_show_text (uiCtx, utf8);  
+  cairo_show_text (uiCtx, utf8);
 
   cairo_surface_flush(ui);
 
@@ -178,11 +187,15 @@ HANDLE(frame, void, Output) {
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+  cairo_surface_destroy(ui);
+  cairo_destroy(uiCtx);
+
   /* wlr_renderer_end(container->server->renderer); */
   /* wlr_output_commit(container->wlr_output); */
   /* return; */
 
   set4fv(container->windowShader, "model", 1, GL_FALSE, (float*)trans);
+  set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)ndc);
 
   float n = -0.5f, p = 0.5f;
   /*
@@ -220,7 +233,7 @@ HANDLE(frame, void, Output) {
 
   glDisableVertexAttribArray(0);
   glDisableVertexAttribArray(1);
-  
+
   wlr_renderer_end(container->server->renderer);
   wlr_output_commit(container->wlr_output);
 }
@@ -244,8 +257,8 @@ struct point rotateAbout(struct point pivot, struct point org, float rad)  {
 #define DIST(x1,y1,x2,y2) (sqrt(pow(x1-x2, 2) + pow(y1-y2, 2)))
   float newAng = atan((pivot.y-org.y)/(pivot.x-org.x)) + rad;
   if(pivot.x > org.x) newAng += PI;
-  float newX = pivot.x + DIST(pivot.x, pivot.y, org.x, org.y) * sin(newAng);
-  float newY = pivot.y + DIST(pivot.x, pivot.y, org.x, org.y) * cos(newAng);
+  float newX = pivot.x + DIST(pivot.x, pivot.y, org.x, org.y) * cos(newAng);
+  float newY = pivot.y + DIST(pivot.x, pivot.y, org.x, org.y) * sin(newAng);
   return (struct point){.x=newX, .y=newY};
 }
 
@@ -264,7 +277,7 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   float height = (float)surface->current.height * ctx->view->scale;
 
   float totalWidth = (float)ctx->width * ctx->view->scale;
-  float totalHeight = (float)ctx->height * ctx->view->scale;  
+  float totalHeight = (float)ctx->height * ctx->view->scale;
 
   float halfWidth = width / 2;
   float halfHeight = height / 2;
@@ -272,8 +285,8 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   float halfTotalWidth = totalWidth / 2;
   float halfTotalHeight = totalHeight / 2;
 
-  float pivotX = ctx->view->x + halfTotalWidth;
-  float pivotY = ctx->view->y + halfTotalHeight;
+  float pivotX = ctx->view->x + halfTotalWidth + (float)ctx->offsetX * ctx->view->scale;
+  float pivotY = ctx->view->y + halfTotalHeight + (float)ctx->offsetY * ctx->view->scale;
 
   float rot = ctx->output->server->foo;
 
@@ -288,23 +301,23 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   printPoint(lt);
   printPoint(rt);
   printPoint(lb);
-  printPoint(rb);  
+  printPoint(rb);
 
-  cairo_new_path(ctx->uiCtx);  
-  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 1, 0.8);    
+  cairo_new_path(ctx->uiCtx);
+  cairo_set_source_rgba (ctx->uiCtx, 0, 0, 1, 0.8);
   cairo_arc (ctx->uiCtx, pivotX, pivotY, 5.0, 0, 2*M_PI);
   cairo_fill (ctx->uiCtx);
 
   cairo_new_path(ctx->uiCtx);
   cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (ctx->uiCtx, lt.x, lt.y, 8.0, 0, 2*M_PI);
+  cairo_arc (ctx->uiCtx, lt.x, lt.y, 15.0, 0, 2*M_PI);
   cairo_fill (ctx->uiCtx);
-  
+
   cairo_new_path(ctx->uiCtx);
   cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
   cairo_arc (ctx->uiCtx, rt.x, rt.y, 8.0, 0, 2*M_PI);
   cairo_fill (ctx->uiCtx);
-  
+
   cairo_new_path(ctx->uiCtx);
   cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
   cairo_arc (ctx->uiCtx, lb.x, lb.y, 8.0, 0, 2*M_PI);
@@ -313,25 +326,13 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   cairo_new_path(ctx->uiCtx);
   cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
   cairo_arc (ctx->uiCtx, rb.x, rb.y, 8.0, 0, 2*M_PI);
-  cairo_fill (ctx->uiCtx);    
-  
+  cairo_fill (ctx->uiCtx);
+
 
   cairo_new_path(ctx->uiCtx);
   cairo_set_source_rgba (ctx->uiCtx, 0, 0, 0, 0.8);
   cairo_arc (ctx->uiCtx, orgX, orgY, 5.0, 0, 2*M_PI);
   cairo_fill (ctx->uiCtx);
-
-  /* cairo_new_path(ctx->uiCtx);   */
-  /* cairo_set_source_rgba (ctx->uiCtx, 0, 0,  1, 0.8);     */
-  /* cairo_arc (ctx->uiCtx, x + ctx->view->x + halfWidth, y + ctx->view->y+halfHeight, 5.0, 0, 2*M_PI); */
-  /* cairo_fill (ctx->uiCtx);         */
-
-
-  //glm_translate(trans, (float[3]){x, y, 0.0f});
-  //glm_translate(trans, (float[3]){(float)ctx->view->x-halfTotalWidth, (float)ctx->view->y-halfTotalHeight, 0.0f});
-  //glm_translate(trans, (float[3]){(float)ctx->view->x+halfWidth, (float)ctx->view->y+halfHeight, 0.0f});  
-  //glm_rotate_at(trans, (float[3]){0, 0, 0.0f}, rot, GLM_ZUP);
-  
 
   set4fv(ctx->output->windowShader, "model", 1, GL_FALSE, trans);
 
@@ -341,34 +342,25 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
    |      |
    *------*
    P1     P2
-   */  
+   */
+
+  static float baz = 0;
+  LOG("%d", ctx->depth);
+  float zP = ctx->depth;
 
   GLfloat vVertices[] = {
-    lt.x,  lt.y, 0.0f,  // Position 0
-    0.0f,  1.0f,  // TexCoord 0
+    lt.x,  lt.y, zP,  // Position 0
+    0.0f,  0.0f,  // TexCoord 0
 
-    lb.x,  lb.y, 0.0f,  // Position 1
-    0.0f,  0.0f,  // TexCoord 1
+    lb.x,  lb.y, zP,  // Position 1
+    0.0f,  1.0f,  // TexCoord 1
 
-    rb.x,  rb.y, 0.0f,  // Position 2
-    1.0f,  0.0f,  // TexCoord 2
+    rb.x,  rb.y, zP,  // Position 2
+    1.0f,  1.0f,  // TexCoord 2
 
-    rt.x,  rt.y, 0.0f,  // Position 3
-    1.0f,  1.0f   // TexCoord 3
+    rt.x,  rt.y, zP,  // Position 3
+    1.0f,  0.0f   // TexCoord 3
   };
-  /* GLfloat vVertices[] = { */
-  /*   0, 0, 0.0f,  // Position 0 */
-  /*   0.0f,  1.0f,  // TexCoord 0 */
-
-  /*   0, 100, 0.0f,  // Position 1 */
-  /*   0.0f,  0.0f,  // TexCoord 1 */
-
-  /*   100, 100, 0.0f,  // Position 2 */
-  /*   1.0f,  0.0f,  // TexCoord 2 */
-
-  /*   100, 0, 0.0f,  // Position 3 */
-  /*   1.0f,  1.0f   // TexCoord 3 */
-  /* }; */
 
   GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
@@ -407,5 +399,5 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
 }
 
 void renderUI(struct Output *output) {
-  
+
 }
