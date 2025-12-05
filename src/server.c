@@ -1,4 +1,72 @@
 #include "server.h"
+#include <math.h>
+
+/* Animation frame callback - updates smooth movement and rotation */
+static int animationFrame(void *data) {
+  struct DeskServer *server = (struct DeskServer *)data;
+  bool needs_redraw = false;
+  
+  struct View *view;
+  wl_list_for_each(view, &server->views, link) {
+    if (!view->xdg || !view->xdg->surface) continue;
+    
+    /* Update position with velocity - spring physics */
+    float dx = view->target_x - view->x;
+    float dy = view->target_y - view->y;
+    
+    /* Accelerate towards target */
+    float stiffness = 0.3f;
+    view->vel_x += dx * stiffness;
+    view->vel_y += dy * stiffness;
+    
+    /* Dampen velocity (friction) */
+    view->vel_x *= view->dampening;
+    view->vel_y *= view->dampening;
+    
+    /* Apply velocity */
+    if (fabs(view->vel_x) > 0.1f || fabs(view->vel_y) > 0.1f) {
+      view->x += view->vel_x;
+      view->y += view->vel_y;
+      needs_redraw = true;
+    } else if (fabs(dx) > 0.5f || fabs(dy) > 0.5f) {
+      /* Snap when close and slow */
+      view->x = view->target_x;
+      view->y = view->target_y;
+      view->vel_x = view->vel_y = 0;
+      needs_redraw = true;
+    }
+    
+    /* Update rotation with velocity - spring physics */
+    float d_rot = view->target_rot - view->rot;
+    while (d_rot > M_PI) d_rot -= 2 * M_PI;
+    while (d_rot < -M_PI) d_rot += 2 * M_PI;
+    
+    view->rot_vel += d_rot * stiffness;
+    view->rot_vel *= view->dampening;
+    
+    if (fabs(view->rot_vel) > 0.001f) {
+      view->rot += view->rot_vel;
+      needs_redraw = true;
+    } else if (fabs(d_rot) > 0.01f) {
+      view->rot = view->target_rot;
+      view->rot_vel = 0;
+      needs_redraw = true;
+    }
+  }
+  
+  /* Trigger redraw if anything moved */
+  if (needs_redraw) {
+    struct Output *output;
+    wl_list_for_each(output, &server->outputs, link) {
+      wlr_output_schedule_frame(output->wlr_output);
+    }
+  }
+  
+  /* Reschedule timer for next frame */
+  wl_event_source_timer_update(server->animation_timer, 16);
+  
+  return 0;
+}
 
 struct DeskServer *newServer() {
   wlr_log_init(WLR_DEBUG, NULL);
@@ -61,6 +129,7 @@ struct DeskServer *newServer() {
   server->superPressed = false;
   server->moveMode = false;
   server->grabbed_view = NULL;
+  server->animation_timer = NULL;
 
   return server;
 }
@@ -68,6 +137,11 @@ struct DeskServer *newServer() {
 void startServer(struct DeskServer *server) {
   wlr_log(WLR_INFO, "Running Wayland compositor on WAYLAND_DISPLAY=%s", server->socket);
   setenv("WAYLAND_DISPLAY", server->socket, true);
+
+  /* Start animation timer (~60 FPS) */
+  struct wl_event_loop *loop = wl_display_get_event_loop(server->display);
+  server->animation_timer = wl_event_loop_add_timer(loop, animationFrame, server);
+  wl_event_source_timer_update(server->animation_timer, 16);  // 16ms = ~60 FPS
 
   ASSERTN(wlr_backend_start(server->backend));
   wl_display_run(server->display);
@@ -92,6 +166,8 @@ HANDLE(newXdgToplevel, struct wlr_xdg_toplevel, DeskServer){
     if (view) {
       view->x = 100;
       view->y = 100;
+      view->target_x = 100;
+      view->target_y = 100;
       view->scale = 1;
     } else {
       LOG("Ignoring xdg surface without a wl_surface");
@@ -172,8 +248,9 @@ HANDLE(cursorMotion, struct wlr_pointer_motion_event, DeskServer){
   if (container->moveMode && container->grabbed_view) {
     double dx = container->cursor->x - container->grab_x;
     double dy = container->cursor->y - container->grab_y;
-    container->grabbed_view->x = container->grab_view_x + (int)dx;
-    container->grabbed_view->y = container->grab_view_y + (int)dy;
+    /* Set target position for smooth movement */
+    container->grabbed_view->target_x = container->grab_view_x + (int)dx;
+    container->grabbed_view->target_y = container->grab_view_y + (int)dy;
   } else {
     processCursorMotion(container, data->time_msec);
   }
@@ -186,8 +263,9 @@ HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_absolute_event, DeskServe
   if (container->moveMode && container->grabbed_view) {
     double dx = container->cursor->x - container->grab_x;
     double dy = container->cursor->y - container->grab_y;
-    container->grabbed_view->x = container->grab_view_x + (int)dx;
-    container->grabbed_view->y = container->grab_view_y + (int)dy;
+    /* Set target position for smooth movement */
+    container->grabbed_view->target_x = container->grab_view_x + (int)dx;
+    container->grabbed_view->target_y = container->grab_view_y + (int)dy;
   } else {
     processCursorMotion(container, data->time_msec);
   }
@@ -299,7 +377,8 @@ HANDLE(resizeHandler, int, DeskServer) {
     struct View *view = viewAt(container, container->cursor->x, 
                                 container->cursor->y, NULL, NULL, NULL);
     if (view) {
-      view->rot += *data * (PI / 1000);
+      /* Set target rotation for smooth rotation */
+      view->target_rot += *data * (PI / 1000);
       
       /* Re-send motion event with updated surface-local coords after rotation */
       processCursorMotion(container, 0);

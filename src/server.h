@@ -62,6 +62,9 @@ typedef struct DeskServer {
   struct View *grabbed_view;
   double grab_x, grab_y;  // cursor position at grab start
   int grab_view_x, grab_view_y;  // view position at grab start
+  
+  // Animation loop
+  struct wl_event_source *animation_timer;
 } DeskServer;
 
 struct DeskServer *newServer();

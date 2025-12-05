@@ -22,10 +22,21 @@ typedef struct View {
   struct wl_listener commit;
   bool needs_configure;
 
-  int x, y;
+  float x, y;
   float fadeIn;
   float rot;
   float scale;
+  
+  // Smooth movement with velocity
+  float vel_x, vel_y;
+  float target_x, target_y;
+  
+  // Smooth rotation with velocity
+  float rot_vel;
+  float target_rot;
+  
+  // Dampening factor (0.0-1.0, lower = smoother)
+  float dampening;
 } View;
 
 struct View *mkView(struct DeskServer*, struct wlr_xdg_surface*);

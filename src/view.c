@@ -17,6 +17,15 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
   view->fadeIn = 1;
   view->xdg->data = view;
   view->needs_configure = true;
+  
+  // Initialize smooth movement and rotation
+  view->vel_x = 0.0f;
+  view->vel_y = 0.0f;
+  view->target_x = 0.0f;
+  view->target_y = 0.0f;
+  view->rot_vel = 0.0f;
+  view->target_rot = 0.0f;
+  view->dampening = 0.35f;  // Friction: higher = smoother/laggier
 
   return view;
 }
