@@ -14,6 +14,8 @@ typedef struct DeskServer {
   // xdg shell
   struct wlr_xdg_shell *xdgShell;
   struct wl_listener newXdgSurface;
+  struct wl_listener newXdgToplevel;
+  struct wl_listener newXdgPopup;
   struct wl_list views;
 
   // Input
@@ -51,6 +53,15 @@ typedef struct DeskServer {
   float sx, sy;
 
   int rotationMode;
+  
+  struct View *focused_view;
+
+  // Window move state
+  bool superPressed;
+  bool moveMode;
+  struct View *grabbed_view;
+  double grab_x, grab_y;  // cursor position at grab start
+  int grab_view_x, grab_view_y;  // view position at grab start
 } DeskServer;
 
 struct DeskServer *newServer();
@@ -58,6 +69,8 @@ void startServer(struct DeskServer*);
 void destroyServer(struct DeskServer*);
 
 LISTNER(newXdgSurface, struct wlr_xdg_surface, DeskServer);
+LISTNER(newXdgToplevel, struct wlr_xdg_toplevel, DeskServer);
+LISTNER(newXdgPopup, struct wlr_xdg_popup, DeskServer);
 LISTNER(newInput, struct wlr_input_device, DeskServer);
 LISTNER(requestCursor, struct wlr_seat_pointer_request_set_cursor_event, DeskServer);
 LISTNER(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskServer);

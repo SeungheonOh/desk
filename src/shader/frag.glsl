@@ -8,9 +8,6 @@ uniform float time;
 
 void main()
 {
-  //outColor = min(texture2D(s_texture, v_texCoord.xy), vec4(sin(time), cos(time), sin(time), 1));
-  //vec4 texColor = vec4(texture2D(s_texture, v_texCoord.xy).rgb, 1);
-  vec4 texColor = texture2D(s_texture, v_texCoord.xy);
+  vec4 texColor = texture(s_texture, v_texCoord);
   outColor = texColor;
-  //outColor = vec4(sin(time), cos(time), tan(time), 1);  
 }                                                  

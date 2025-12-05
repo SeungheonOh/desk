@@ -1,20 +1,19 @@
 #include "output.h"
+#include "aux.h"
+#include <math.h>
 
 struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
-  struct Output *output = malloc(sizeof(struct Output));
+  struct Output *output = calloc(1, sizeof(struct Output));
   output->server = container;
   output->wlr_output = data;
+  output->shader_initialized = false;
+  output->windowShader = NULL;
 
   ATTACH(Output, output, data->events.frame, frame);
   ATTACH(Output, output, data->events.request_state, requestState);
   ATTACH(Output, output, data->events.destroy, destroy);
 
-  output->windowShader = newShader(WINDOW_VERTEX_SHADER, WINDOW_FRAGMENT_SHADER);
-  ASSERT(output->windowShader, "Shader failed to load");
-
   wl_list_insert(&container->outputs, &output->link);
-
-  GL_CHECK(glGenTextures(1, &output->uiTexture));
 
   return output;
 }
@@ -28,217 +27,155 @@ void destroyOutput(struct Output *container){
 }
 
 HANDLE(frame, void, Output) {
+  int view_count = 0;
   struct View *v;
   wl_list_for_each(v, &container->server->views, link) {
+    view_count++;
     LOG("FADEIN: %f", v->fadeIn);
     if(v->fadeIn > 0) v->fadeIn -= 0.1;
   }
-  //if(!wl_list_empty(&container->server->views)) LOG("nothing to render");
+  static int once = 1;
+  if(once && view_count == 0) {
+    LOG("WARNING: No views to render");
+    once = 0;
+  }
 
-  wlr_output_attach_render(container->wlr_output, NULL);
-  wlr_renderer_begin(container->server->renderer, container->wlr_output->width, container->wlr_output->height);
+  struct wlr_output_state state;
+  wlr_output_state_init(&state);
 
-  /* glEnable(GL_SCISSOR_TEST); */
-  /* glScissor(1,1, 500, 500); */
+  container->pass = wlr_output_begin_render_pass(container->wlr_output, &state, NULL);
+  if (!container->pass) {
+    LOG("Failed to begin render pass");
+    wlr_output_state_finish(&state);
+    return;
+  }
 
+  /* Initialize shader on first frame when GL context is available (within render pass) */
+  if (!container->shader_initialized) {
+   container->windowShader = newShader(WINDOW_VERTEX_SHADER, WINDOW_FRAGMENT_SHADER);
+   if (!container->windowShader) {
+     LOG("Failed to load shader, skipping frame");
+     wlr_output_state_finish(&state);
+     return;
+   }
+   container->windowShaderExternal = newShader(WINDOW_VERTEX_SHADER, WINDOW_FRAGMENT_SHADER_EXTERNAL);
+   if (!container->windowShaderExternal) {
+     LOG("Failed to load external shader, skipping frame");
+     wlr_output_state_finish(&state);
+     return;
+   }
+   container->cursorShader = newShader(CURSOR_VERTEX_SHADER, CURSOR_FRAGMENT_SHADER);
+   if (!container->cursorShader) {
+     LOG("Failed to load cursor shader, skipping frame");
+     wlr_output_state_finish(&state);
+     return;
+   }
+   GL_CHECK(glGenTextures(1, &container->uiTexture));
+   
+   /* Create screen texture for cursor effect */
+   GL_CHECK(glGenTextures(1, &container->screenTexture));
+   glBindTexture(GL_TEXTURE_2D, container->screenTexture);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, 
+                container->wlr_output->width, container->wlr_output->height,
+                0, GL_RGB, GL_UNSIGNED_BYTE, NULL);
+   
+   container->shader_initialized = true;
+   LOG("Shaders initialized successfully");
+  }
+
+  /* Begin GL rendering within the render pass */
   glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
   useShader(container->windowShader);
-
+  
+  /* Setup projection for orthographic view */
   mat4 proj = GLM_MAT4_IDENTITY_INIT;
-  mat4 view = GLM_MAT4_IDENTITY_INIT;
-  mat4 trans = GLM_MAT4_IDENTITY_INIT;
-
-  mat4 pers = GLM_MAT4_IDENTITY_INIT;
-  mat4 ndc = GLM_MAT4_IDENTITY_INIT;
-
-  glm_perspective((PI/180)*90, container->wlr_output->width /container->wlr_output->height, 0, 10.0f, pers);
-  glm_ortho(0, container->wlr_output->width, 0, container->wlr_output->height, 0, 20.0f, ndc);
-  glm_mat4_mul(pers,ndc,proj);
-  //glm_ortho(-1, 1, -1, 1, 0.00001f, 10000.0f, proj);
-
+  glm_ortho(0, container->wlr_output->width, 0, container->wlr_output->height, -10.0f, 10.0f, proj);
   set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)proj);
+  
+  mat4 view = GLM_MAT4_IDENTITY_INIT;
   set4fv(container->windowShader, "view", 1, GL_FALSE, (float*)view);
-  setFloat(container->windowShader, "time", container->server->foo);
 
-  cairo_surface_t *ui =
-    cairo_image_surface_create(CAIRO_FORMAT_ARGB32,
-			       container->wlr_output->width,
-			       container->wlr_output->height);
-  if(!ui) EXPLODE("Failed to create caior surface");
-
-  cairo_t *uiCtx = cairo_create(ui);
-
-  float foo = 0;
+  /* Render client surfaces with rotation support */
+  /* Render back-to-front: focused view is at front of list, should render last (on top) */
+  float depth = -6;
   struct View *e;
-  wl_list_for_each(e, &container->server->views, link) {
-
-#define ABS(a) (a>0? a:a*-1)
-    struct wlr_box surfaceBox;
-    wlr_surface_get_extends(e->xdgToplevel->base->surface, &surfaceBox);
-
-    LOG("BOUNDS: %d %d %d %d", surfaceBox.x, surfaceBox.y, surfaceBox.width, surfaceBox.height);
-
+  wl_list_for_each_reverse(e, &container->server->views, link) {
+    if (!e->xdg || !e->xdg->surface || !e->xdg->surface->mapped) {
+      depth++;
+      continue;
+    }
 
     struct RenderContext renderContext = {
       .output = container,
       .view = e,
-      .width = surfaceBox.width,
-      .height = surfaceBox.height,
-      .offsetX = surfaceBox.x,
-      .offsetY = surfaceBox.y,
-      .uiCtx = uiCtx,
-      .depth = e->fadeIn,
+      .offsetX = 0,
+      .offsetY = 0,
+      .depth = depth,
     };
 
-    e->scale = 1;
-    setFloat(container->windowShader, "time", e->x * e->y * 0.001);
-
-    wlr_surface_for_each_surface(e->xdgToplevel->base->surface, renderSurfaceIter, &renderContext);
-
-    cairo_new_path(uiCtx);
-    cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);
-    cairo_arc (uiCtx, e->x, e->y, 5.0, 0, 2*M_PI);
-    cairo_stroke (uiCtx);
+    /* Iterate all surfaces in the xdg tree (toplevel + popups + subsurfaces) */
+    wlr_xdg_surface_for_each_surface(e->xdg, renderSurfaceIter, &renderContext);
+    depth++;
   }
 
-  cairo_text_extents_t extents;
+  /* Capture screen content for cursor effect */
+  glBindTexture(GL_TEXTURE_2D, container->screenTexture);
+  glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 
+                      container->wlr_output->width, container->wlr_output->height);
 
-  double x=25.6,  y=128.0;
-  double x1=102.4, y1=230.4,
-    x2=153.6, y2=25.6,
-    x3=230.4, y3=128.0;
-
-  cairo_move_to (uiCtx, x, y);
-  cairo_curve_to (uiCtx, x1, y1, x2, y2, x3, y3);
-
-  cairo_set_line_width (uiCtx, 10.0);
-  cairo_stroke (uiCtx);
-
-  cairo_set_source_rgba (uiCtx, 1, 0.2, 0.2, 0.6);
-  cairo_set_line_width (uiCtx, 6.0);
-  cairo_move_to (uiCtx,x,y);   cairo_line_to (uiCtx,x1,y1);
-  cairo_move_to (uiCtx,x2,y2); cairo_line_to (uiCtx,x3,y3);
-  cairo_stroke (uiCtx);
-
-  cairo_set_source_rgba (uiCtx, 0, 0, 0, 1);
-  cairo_move_to(uiCtx, 0, 0);
-  cairo_line_to (uiCtx,0, container->wlr_output->height);
-  cairo_line_to (uiCtx,container->wlr_output->width, container->wlr_output->height);
-  cairo_line_to (uiCtx,container->wlr_output->width, 0);
-  cairo_line_to (uiCtx,0, 0);
-  cairo_set_line_width (uiCtx, 10.0);
-  cairo_stroke (uiCtx);
-
-  cairo_new_path(uiCtx);
-  cairo_set_source_rgba (uiCtx, 0, 0, 0, 0.8);
-  cairo_arc (uiCtx, container->server->cursor->x, container->server->cursor->y, 1.0, 0, 2*M_PI);
-  cairo_stroke (uiCtx);
-
-  if(container->server->sx != -1 && container->server->sy != -1) {
-    cairo_set_source_rgba (uiCtx, 1, 0, 0, 0.3);
-    cairo_line_to(uiCtx, container->server->sx, container->server->sy);
-    cairo_line_to(uiCtx, container->server->sx, container->server->cursor->y);
-    cairo_line_to(uiCtx, container->server->cursor->x, container->server->cursor->y);
-    cairo_line_to(uiCtx, container->server->cursor->x, container->server->sy);
-    cairo_fill(uiCtx);
-  }
-
-  const char utf8[100];
-  sprintf(utf8, "%.0f %.0f", container->server->cursor->x, container->server->cursor->y);
-
-  cairo_set_source_rgba(uiCtx, 1, 1, 1, 0);
-  cairo_paint(uiCtx);
-
-  cairo_select_font_face (uiCtx, "Sans",
-    CAIRO_FONT_SLANT_NORMAL,
-    CAIRO_FONT_WEIGHT_NORMAL);
-
-  cairo_set_source_rgba(uiCtx, 0, 0, 0, 1);
-  cairo_set_font_size (uiCtx, 100.0);
-  cairo_text_extents (uiCtx, utf8, &extents);
-
-  x=500;
-  y=600;
-
-  cairo_move_to (uiCtx, x,y);
-  cairo_show_text (uiCtx, utf8);
-
-  cairo_surface_flush(ui);
-
-  glBindTexture(GL_TEXTURE_2D, container->uiTexture);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-  glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-  glTexImage2D(GL_TEXTURE_2D,
-	       0,
-	       GL_RGBA,
-	       container->wlr_output->width,
-	       container->wlr_output->height,
-	       0,
-	       GL_RGBA,
-	       GL_UNSIGNED_BYTE,
-	       cairo_image_surface_get_data(ui)
-	       );
-
+  /* Draw fancy cursor */
+  useShader(container->cursorShader);
+  
+  float cursorX = container->server->cursor->x;
+  float cursorY = container->server->cursor->y;
+  float radius = 14.0f;
+  
+  glUniform2f(glGetUniformLocation(container->cursorShader->ID, "u_resolution"),
+              (float)container->wlr_output->width, (float)container->wlr_output->height);
+  glUniform2f(glGetUniformLocation(container->cursorShader->ID, "u_center"),
+              cursorX, cursorY);
+  glUniform1f(glGetUniformLocation(container->cursorShader->ID, "u_radius"), radius);
+  
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, container->uiTexture);
-  glUniform1i(glGetUniformLocation(container->windowShader->ID, "s_texture"), 0);
-
-  glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  cairo_surface_destroy(ui);
-  cairo_destroy(uiCtx);
-
-  /* wlr_renderer_end(container->server->renderer); */
-  /* wlr_output_commit(container->wlr_output); */
-  /* return; */
-
-  set4fv(container->windowShader, "model", 1, GL_FALSE, (float*)trans);
-  set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)ndc);
-
-  float n = -0.5f, p = 0.5f;
-  /*
-   P0     P3
-   *------*
-   |      |
-   *------*
-   P1     P2
-   */
-  GLfloat vVertices[] = {
-    0,  0, 0.0f,  // Position 0
-    0.0f,  0.0f,        // TexCoord 0
-
-    0, container->wlr_output->height, 0.0f,  // Position 1
-    0.0f,  1.0f,        // TexCoord 1
-
-    container->wlr_output->width, container->wlr_output->height, 0.0f,  // Position 2
-    1.0f,  1.0f,        // TexCoord 2
-
-    container->wlr_output->width,  0, 0.0f,  // Position 3
-    1.0f,  0.0f         // TexCoord 3
+  glBindTexture(GL_TEXTURE_2D, container->screenTexture);
+  glUniform1i(glGetUniformLocation(container->cursorShader->ID, "u_screen_texture"), 0);
+  
+  /* Draw cursor quad using immediate vertex data */
+  GLfloat cursorVertices[] = {
+    -1.0f, -1.0f,
+     1.0f, -1.0f,
+     1.0f,  1.0f,
+    -1.0f, -1.0f,
+     1.0f,  1.0f,
+    -1.0f,  1.0f,
   };
-  GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
-
-  glVertexAttribPointer ( 0, 3, GL_FLOAT,
-			  GL_FALSE, 5 * sizeof ( GLfloat ), vVertices );
-
-  glVertexAttribPointer ( 1, 2, GL_FLOAT,
-			  GL_FALSE, 5 * sizeof ( GLfloat ), &vVertices[3] );
-
+  
+  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), cursorVertices);
   glEnableVertexAttribArray(0);
-  glEnableVertexAttribArray(1);
-
-  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
-
+  glDrawArrays(GL_TRIANGLES, 0, 6);
   glDisableVertexAttribArray(0);
-  glDisableVertexAttribArray(1);
 
-  wlr_renderer_end(container->server->renderer);
-  wlr_output_commit(container->wlr_output);
+  if (!wlr_render_pass_submit(container->pass)) {
+    LOG("Failed to submit render pass");
+    wlr_output_state_finish(&state);
+    return;
+  }
+
+  if (!wlr_output_commit_state(container->wlr_output, &state)) {
+    LOG("Failed to commit output state");
+    wlr_output_state_finish(&state);
+    return;
+  }
+
+  wlr_output_state_finish(&state);
 }
 
 HANDLE(requestState, struct wlr_output_event_request_state, Output) {
@@ -260,104 +197,86 @@ void printPoint(struct point p) {
 void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   struct RenderContext *ctx = (struct RenderContext*)data;
 
-  ctx->view->scale = 1; //ctx->output->server->foo;
-
-  x *= ctx->view->scale;
-  y *= ctx->view->scale;
-
-  float width = (float)surface->current.width * ctx->view->scale;
-  float height = (float)surface->current.height * ctx->view->scale;
-
-  float totalWidth = (float)ctx->width * ctx->view->scale;
-  float totalHeight = (float)ctx->height * ctx->view->scale;
-
-  float halfWidth = width / 2;
-  float halfHeight = height / 2;
-
-  float halfTotalWidth = totalWidth / 2;
-  float halfTotalHeight = totalHeight / 2;
-
-  float pivotX = ctx->view->x + halfTotalWidth + (float)ctx->offsetX * ctx->view->scale;
-  float pivotY = ctx->view->y + halfTotalHeight + (float)ctx->offsetY * ctx->view->scale;
-
-  struct point o = dilateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=x, .y=y}, ctx->view->scale);
-  /* x = o.x; */
-  /* y = o.y; */
-
-  float rot = ctx->output->server->bar;
-
-  float orgX = x + ctx->view->x;
-  float orgY = y + ctx->view->y;
-
-  struct point lt = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX, .y=orgY}, rot);
-  struct point rt = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX + width, .y=orgY}, rot);
-  struct point lb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX, .y=orgY+height}, rot);
-  struct point rb = rotateAbout((struct point){.x=pivotX, .y=pivotY}, (struct point){.x=orgX+width, .y=orgY+height}, rot);
-
-  /*
-   P0     P3
-   *------*
-   |      |
-   *------*
-   P1     P2
-   */
-
-  static float baz = 0;
-  float d = ctx->depth;
+  struct wlr_texture *texture = wlr_surface_get_texture(surface);
+  if (!texture) {
+    goto frame_done;
+  }
 
 
-#define MAX(a, b) ((a>b)?a:b)
-#define MIN(a, b) ((a<b)?a:b)  
-  float zP1 = MAX(d, 0) * -1;
-  float zP2 = MAX(d, 0) * -1;
-  float zP3 = MAX(d, 0) * -1;
-  float zP4 = MAX(d, 0) * -1;    
+  int width = surface->current.width;
+  int height = surface->current.height;
 
+  LOG("Rendering surface at %d,%d, size=%dx%d, rotation=%.2f rad", x, y, width, height, ctx->view->rot);
+
+  /* Get the underlying GL texture from wlroots */
+  struct wlr_gles2_texture_attribs attribs;
+  wlr_gles2_texture_get_attribs(texture, &attribs);
+
+  LOG("Texture: target=%s tex=%u has_alpha=%d", 
+      attribs.target == GL_TEXTURE_EXTERNAL_OES ? "EXTERNAL_OES" : "TEXTURE_2D",
+      attribs.tex, attribs.has_alpha);
+
+  /* Select shader based on texture target */
+  struct shader *shader = (attribs.target == GL_TEXTURE_EXTERNAL_OES) 
+    ? ctx->output->windowShaderExternal 
+    : ctx->output->windowShader;
+  useShader(shader);
+
+  /* Setup projection for orthographic view */
+  mat4 proj = GLM_MAT4_IDENTITY_INIT;
+  glm_ortho(0, ctx->output->wlr_output->width, 0, ctx->output->wlr_output->height, -10.0f, 10.0f, proj);
+  set4fv(shader, "projection", 1, GL_FALSE, (float*)proj);
+  
+  mat4 view = GLM_MAT4_IDENTITY_INIT;
+  set4fv(shader, "view", 1, GL_FALSE, (float*)view);
+
+  /* Setup model matrix with rotation */
+  mat4 model = GLM_MAT4_IDENTITY_INIT;
+  
+  float px = ctx->view->x + x + width / 2.0f;
+  float py = ctx->view->y + y + height / 2.0f;
+  
+  /* Translate to center, rotate, translate back */
+  glm_translate(model, (vec3){px, py, ctx->depth});
+  if (ctx->view->rot != 0.0f) {
+    glm_rotate_z(model, ctx->view->rot, model);
+  }
+  glm_translate(model, (vec3){-width / 2.0f, -height / 2.0f, 0});
+
+  set4fv(shader, "model", 1, GL_FALSE, (float*)model);
+
+  /* Bind texture and render quad */
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(attribs.target, attribs.tex);
+  
+  /* Set texture parameters - important for external textures */
+  glTexParameteri(attribs.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(attribs.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(attribs.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(attribs.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  
+  glUniform1i(glGetUniformLocation(shader->ID, "s_texture"), 0);
+
+  /* Vertex data for quad */
   GLfloat vVertices[] = {
-    lt.x,  lt.y, zP1,  // Position 0
-    0.0f,  0.0f,  // TexCoord 0
-
-    lb.x,  lb.y, zP2,  // Position 1
-    0.0f,  1.0f,  // TexCoord 1
-
-    rb.x,  rb.y, zP3,  // Position 2
-    1.0f,  1.0f,  // TexCoord 2
-
-    rt.x,  rt.y, zP4,  // Position 3
-    1.0f,  0.0f   // TexCoord 3
+    0,  0, 0.0f,    0.0f,  0.0f,
+    0, height, 0.0f, 0.0f,  1.0f,
+    width, height, 0.0f, 1.0f,  1.0f,
+    width,  0, 0.0f, 1.0f,  0.0f
   };
-
   GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
 
-  glVertexAttribPointer ( 0, 3, GL_FLOAT,
-			  GL_FALSE, 5 * sizeof ( GLfloat ), vVertices );
-
-  glVertexAttribPointer ( 1, 2, GL_FLOAT,
-			  GL_FALSE, 5 * sizeof ( GLfloat ), &vVertices[3] );
-
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), vVertices);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), &vVertices[3]);
   glEnableVertexAttribArray(0);
   glEnableVertexAttribArray(1);
-
-  struct wlr_texture *stexture = wlr_surface_get_texture(surface);
-  struct wlr_gles2_texture_attribs attrs;
-  wlr_gles2_texture_get_attribs(stexture, &attrs);
-
-  GLint appTexture = attrs.tex;
-  GLenum appTextureTarget = attrs.target;
-
-  glActiveTexture(GL_TEXTURE1);
-  glBindTexture(appTextureTarget, appTexture);
-
-  glTexParameteri(appTextureTarget, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-  glTexParameteri(appTextureTarget, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-
-  glUniform1i(glGetUniformLocation(ctx->output->windowShader->ID, "s_texture"), 1);
 
   glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
 
   glDisableVertexAttribArray(0);
   glDisableVertexAttribArray(1);
 
+frame_done:
   struct timespec now;
   clock_gettime(CLOCK_MONOTONIC, &now);
   wlr_surface_send_frame_done(surface, &now);

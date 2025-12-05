@@ -33,7 +33,8 @@
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 
-#include <GL/gl.h>
+#include <GLES3/gl3.h>
+#include <GLES2/gl2ext.h>
 #include <cairo.h>
 #include <cglm/vec3.h>
 #include <cglm/mat4.h>

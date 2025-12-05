@@ -11,7 +11,7 @@
 typedef struct View {
   struct DeskServer *server;
   struct wl_list link;
-  struct wlr_xdg_toplevel *xdgToplevel;
+  struct wlr_xdg_surface *xdg;
   struct wl_listener map;
   struct wl_listener unmap;
   struct wl_listener destroy;
@@ -19,6 +19,8 @@ typedef struct View {
   struct wl_listener requestResize;
   struct wl_listener requestMaximize;
   struct wl_listener requestFullscreen;
+  struct wl_listener commit;
+  bool needs_configure;
 
   int x, y;
   float fadeIn;
@@ -28,6 +30,9 @@ typedef struct View {
 
 struct View *mkView(struct DeskServer*, struct wlr_xdg_surface*);
 void destroyView(struct View *);
+void focusView(struct View *, struct wlr_surface *surface);
+struct View *viewAt(struct DeskServer *, double lx, double ly, 
+                    struct wlr_surface **surface, double *sx, double *sy);
 
 struct point centerPoint(struct View);
 
@@ -38,4 +43,4 @@ LISTNER(requestMove, void, View)
 LISTNER(requestResize, void, View)
 LISTNER(requestMaximize, void, View)
 LISTNER(requestFullscreen, void, View)
-
+LISTNER(commit, struct wlr_surface, View)
