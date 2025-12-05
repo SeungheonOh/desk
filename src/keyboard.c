@@ -27,12 +27,14 @@ HANDLE(modifiers, void, Keyboard){
   wlr_seat_keyboard_notify_modifiers(container->server->seat,
 				     &container->wlr_keyboard->modifiers);
   
-  // Track Alt key state
+  // Track Alt key state - Alt enables both move and rotation mode
   uint32_t mods = wlr_keyboard_get_modifiers(container->wlr_keyboard);
-  container->server->superPressed = (mods & WLR_MODIFIER_ALT) != 0;
+  bool altPressed = (mods & WLR_MODIFIER_ALT) != 0;
+  container->server->superPressed = altPressed;
+  container->server->rotationMode = altPressed ? 1 : 0;
   
-  // Cancel move if Super is released during drag
-  if (!container->server->superPressed && container->server->moveMode) {
+  // Cancel move if Alt is released during drag
+  if (!altPressed && container->server->moveMode) {
     container->server->moveMode = false;
     container->server->grabbed_view = NULL;
   }
@@ -46,44 +48,40 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
 
   const xkb_keysym_t *syms;
   int nsyms = xkb_state_key_get_syms(container->wlr_keyboard->xkb_state, keycode, &syms);
-  // Check for Alt key via modifiers
+  // Check for Alt key via modifiers - Alt enables both move and rotation mode
   uint32_t mods = wlr_keyboard_get_modifiers(container->wlr_keyboard);
-  container->server->superPressed = (mods & WLR_MODIFIER_ALT) != 0;
+  bool altPressed = (mods & WLR_MODIFIER_ALT) != 0;
+  container->server->superPressed = altPressed;
+  container->server->rotationMode = altPressed ? 1 : 0;
 
   for(int i = 0; i < nsyms; i++) {
-    if(syms[i] == XKB_KEY_x  && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-      container->server->rotationMode = 1;
-    }
-    if(syms[i] == XKB_KEY_x  && data->state == WL_KEYBOARD_KEY_STATE_RELEASED) {      
-      container->server->rotationMode = 0;      
-    }
-    if(syms[i] == XKB_KEY_Escape) {
+    if(syms[i] == XKB_KEY_Escape && altPressed) {
       wl_display_destroy_clients(container->server->display);
       wl_display_terminate(container->server->display);
       return;
     }
-    if(syms[i] == XKB_KEY_q) {
+    if(syms[i] == XKB_KEY_q && altPressed) {
       wl_display_destroy_clients(container->server->display);
       return;
     }
 
-    if(syms[i] == XKB_KEY_a && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if(syms[i] == XKB_KEY_a && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running movie");
       spawn_wayland_client(container->server, "mpv -- vid.mp4 --loop 2>/dev/null");
       return;
     }
-    if(syms[i] == XKB_KEY_b && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if(syms[i] == XKB_KEY_b && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running foot");
       spawn_wayland_client(container->server, "weston-terminal");
       return;
     }
-    if(syms[i] == XKB_KEY_c && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if(syms[i] == XKB_KEY_c && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("running foot");
       spawn_wayland_client(container->server, "./test_click.py");
       return;
     }        
 
-    if(syms[i] == XKB_KEY_r && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+    if(syms[i] == XKB_KEY_r && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("re-compiling shader, %d", wl_list_length(&container->server->outputs));
 
       struct Output *e;

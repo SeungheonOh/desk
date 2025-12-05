@@ -24,31 +24,6 @@ inc = [
 src = []
 subdir('src')
 
-# executable(
-#   'testa',
-#   'temp/test.c',
-#   dependencies: deps,
-#   include_directories: [inc, wlroots_lib],
-#   c_args: ['-DWLR_USE_UNSTABLE -O'],
-#   )
-
-# executable(
-#   'tiny',
-#   'temp/tiny.c',
-#   dependencies: deps,
-#   include_directories: [inc, wlroots_lib],
-#   c_args: ['-DWLR_USE_UNSTABLE -O'],
-#   )
-
-executable(
-  'main',
-  'temp/main.c',
-  dependencies: deps,
-  sources: src,
-  include_directories: [inc, wlroots_lib],
-  c_args: ['-DWLR_USE_UNSTABLE -O'],
-  )
-
 desk = executable(
   'desk',
   'src/desk.c',

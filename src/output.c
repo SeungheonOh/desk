@@ -8,8 +8,10 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
   output->wlr_output = data;
   output->shader_initialized = false;
   output->windowShader = NULL;
+  output->frame_pending = false;
 
   ATTACH(Output, output, data->events.frame, frame);
+  ATTACH(Output, output, data->events.present, present);
   ATTACH(Output, output, data->events.request_state, requestState);
   ATTACH(Output, output, data->events.destroy, destroy);
 
@@ -20,6 +22,7 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
 
 void destroyOutput(struct Output *container){
   wl_list_remove(&container->frame.link);
+  wl_list_remove(&container->present.link);
   wl_list_remove(&container->requestState.link);
   wl_list_remove(&container->destroy.link);
   wl_list_remove(&container->link);
@@ -27,11 +30,14 @@ void destroyOutput(struct Output *container){
 }
 
 HANDLE(frame, void, Output) {
+  if (container->frame_pending) {
+    return;
+  }
+
   int view_count = 0;
   struct View *v;
   wl_list_for_each(v, &container->server->views, link) {
     view_count++;
-    LOG("FADEIN: %f", v->fadeIn);
     if(v->fadeIn > 0) v->fadeIn -= 0.1;
   }
   static int once = 1;
@@ -45,7 +51,6 @@ HANDLE(frame, void, Output) {
 
   container->pass = wlr_output_begin_render_pass(container->wlr_output, &state, NULL);
   if (!container->pass) {
-    LOG("Failed to begin render pass");
     wlr_output_state_finish(&state);
     return;
   }
@@ -169,13 +174,18 @@ HANDLE(frame, void, Output) {
     return;
   }
 
+  container->frame_pending = true;
   if (!wlr_output_commit_state(container->wlr_output, &state)) {
-    LOG("Failed to commit output state");
-    wlr_output_state_finish(&state);
-    return;
+    container->frame_pending = false;
+    wlr_output_schedule_frame(container->wlr_output);
   }
 
   wlr_output_state_finish(&state);
+}
+
+HANDLE(present, struct wlr_output_event_present, Output) {
+  container->frame_pending = false;
+  wlr_output_schedule_frame(container->wlr_output);
 }
 
 HANDLE(requestState, struct wlr_output_event_request_state, Output) {
@@ -206,15 +216,9 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   int width = surface->current.width;
   int height = surface->current.height;
 
-  LOG("Rendering surface at %d,%d, size=%dx%d, rotation=%.2f rad", x, y, width, height, ctx->view->rot);
-
   /* Get the underlying GL texture from wlroots */
   struct wlr_gles2_texture_attribs attribs;
   wlr_gles2_texture_get_attribs(texture, &attribs);
-
-  LOG("Texture: target=%s tex=%u has_alpha=%d", 
-      attribs.target == GL_TEXTURE_EXTERNAL_OES ? "EXTERNAL_OES" : "TEXTURE_2D",
-      attribs.tex, attribs.has_alpha);
 
   /* Select shader based on texture target */
   struct shader *shader = (attribs.target == GL_TEXTURE_EXTERNAL_OES) 

@@ -12,6 +12,7 @@ typedef struct Output {
   struct wl_list link;
   struct wlr_output *wlr_output;
   struct wl_listener frame;
+  struct wl_listener present;
   struct wl_listener requestState;
   struct wl_listener destroy;
 
@@ -20,6 +21,7 @@ typedef struct Output {
   struct shader *cursorShader;
   struct wlr_render_pass *pass;
   bool shader_initialized;
+  bool frame_pending;
 
   GLuint uiTexture;
   GLuint screenTexture;
@@ -29,6 +31,7 @@ struct Output *mkOutput(struct DeskServer *,struct wlr_output*);
 void destroyOutput(struct Output *);
 
 LISTNER(frame, void, Output);
+LISTNER(present, struct wlr_output_event_present, Output);
 LISTNER(requestState, struct wlr_output_event_request_state, Output);
 LISTNER(destroy, struct wlr_output, Output);
 
