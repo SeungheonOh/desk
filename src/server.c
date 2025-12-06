@@ -176,10 +176,17 @@ static void getViewDamageBox(struct View *view, struct wlr_box *box) {
   struct wlr_box surface_box;
   wlr_surface_get_extents(view->xdg->surface, &surface_box);
 
-  float cx = view->x + surface_box.width / 2.0f;
-  float cy = view->y + surface_box.height / 2.0f;
-  float hw = surface_box.width / 2.0f;
-  float hh = surface_box.height / 2.0f;
+  /* surface_box.x/y can be negative for subsurfaces extending above/left */
+  float ext_x = view->x + surface_box.x;
+  float ext_y = view->y + surface_box.y;
+  float ext_w = surface_box.width;
+  float ext_h = surface_box.height;
+
+  /* Center of the full extent box */
+  float cx = ext_x + ext_w / 2.0f;
+  float cy = ext_y + ext_h / 2.0f;
+  float hw = ext_w / 2.0f;
+  float hh = ext_h / 2.0f;
 
   float cos_r = cosf(view->rot);
   float sin_r = sinf(view->rot);

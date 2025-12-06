@@ -28,6 +28,10 @@ typedef struct Output {
 
   struct wlr_damage_ring damage_ring;
   bool needs_full_damage;
+  
+  /* Track damage history for buffer rotation (triple buffering needs 3 frames) */
+  pixman_region32_t damage_history[3];
+  int damage_history_index;
 } Output;
 
 struct Output *mkOutput(struct DeskServer *,struct wlr_output*);

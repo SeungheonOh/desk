@@ -12,6 +12,11 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
   output->needs_full_damage = true;
 
   wlr_damage_ring_init(&output->damage_ring);
+  
+  for (int i = 0; i < 3; i++) {
+    pixman_region32_init(&output->damage_history[i]);
+  }
+  output->damage_history_index = 0;
 
   ATTACH(Output, output, data->events.frame, frame);
   ATTACH(Output, output, data->events.present, present);
@@ -25,6 +30,9 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
 
 void destroyOutput(struct Output *container){
   wlr_damage_ring_finish(&container->damage_ring);
+  for (int i = 0; i < 3; i++) {
+    pixman_region32_fini(&container->damage_history[i]);
+  }
   wl_list_remove(&container->frame.link);
   wl_list_remove(&container->present.link);
   wl_list_remove(&container->requestState.link);
@@ -83,7 +91,43 @@ HANDLE(frame, void, Output) {
     return;
   }
 
+  int output_width = container->wlr_output->width;
+  int output_height = container->wlr_output->height;
+  
+  /* Store current frame's damage in history and get accumulated damage */
+  int curr_idx = container->damage_history_index;
+  pixman_region32_copy(&container->damage_history[curr_idx], &container->damage_ring.current);
   pixman_region32_clear(&container->damage_ring.current);
+  container->damage_history_index = (curr_idx + 1) % 3;
+  
+  /* Accumulate damage from last 3 frames to handle triple buffering */
+  pixman_region32_t accumulated_damage;
+  pixman_region32_init(&accumulated_damage);
+  for (int i = 0; i < 3; i++) {
+    pixman_region32_union(&accumulated_damage, &accumulated_damage, &container->damage_history[i]);
+  }
+  
+  /* Get damage bounding box for scissor optimization */
+  pixman_box32_t *damage_extents = pixman_region32_extents(&accumulated_damage);
+  
+  /* Scissor coordinates - no Y flip needed as rendering uses same coord system */
+  int scissor_x = damage_extents->x1;
+  int scissor_y = damage_extents->y1;
+  int scissor_width = damage_extents->x2 - damage_extents->x1;
+  int scissor_height = damage_extents->y2 - damage_extents->y1;
+  
+  pixman_region32_fini(&accumulated_damage);
+  
+  /* Clamp to valid range */
+  if (scissor_x < 0) scissor_x = 0;
+  if (scissor_y < 0) scissor_y = 0;
+  if (scissor_width <= 0 || scissor_height <= 0) {
+    /* No valid damage, render full screen */
+    scissor_x = 0;
+    scissor_y = 0;
+    scissor_width = output_width;
+    scissor_height = output_height;
+  }
 
   /* Initialize shader on first frame when GL context is available (within render pass) */
   if (!container->shader_initialized) {
@@ -123,6 +167,10 @@ HANDLE(frame, void, Output) {
   }
 
   /* Begin GL rendering within the render pass */
+  /* Enable scissor test to only render damaged region */
+  glEnable(GL_SCISSOR_TEST);
+  glScissor(scissor_x, scissor_y, scissor_width, scissor_height);
+  
   glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT);
   glEnable(GL_BLEND);
@@ -161,12 +209,12 @@ HANDLE(frame, void, Output) {
     depth++;
   }
 
-  /* Capture screen content for cursor effect */
+  /* Capture screen content for cursor effect (within scissor region) */
   glBindTexture(GL_TEXTURE_2D, container->screenTexture);
   glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 
                       container->wlr_output->width, container->wlr_output->height);
 
-  /* Draw fancy cursor */
+  /* Draw fancy cursor (keep scissor enabled to avoid drawing stale content) */
   useShader(container->cursorShader);
   
   float cursorX = container->server->cursor->x;
@@ -197,6 +245,9 @@ HANDLE(frame, void, Output) {
   glEnableVertexAttribArray(0);
   glDrawArrays(GL_TRIANGLES, 0, 6);
   glDisableVertexAttribArray(0);
+  
+  /* Disable scissor after all rendering is complete */
+  glDisable(GL_SCISSOR_TEST);
 
   if (!wlr_render_pass_submit(container->pass)) {
     LOG("Failed to submit render pass");
