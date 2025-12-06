@@ -99,26 +99,15 @@ HANDLE(frame, void, Output) {
   pixman_region32_copy(&container->prev_damage, &container->damage_ring.current);
   pixman_region32_clear(&container->damage_ring.current);
   
-  /* Get damage bounding box for scissor optimization */
-  pixman_box32_t *damage_extents = pixman_region32_extents(&accumulated_damage);
+  /* Get individual damage rectangles for efficient scissoring */
+  int num_rects = 0;
+  pixman_box32_t *damage_rects = pixman_region32_rectangles(&accumulated_damage, &num_rects);
   
-  /* Scissor coordinates - no Y flip needed as rendering uses same coord system */
-  int scissor_x = damage_extents->x1;
-  int scissor_y = damage_extents->y1;
-  int scissor_width = damage_extents->x2 - damage_extents->x1;
-  int scissor_height = damage_extents->y2 - damage_extents->y1;
-  
-  pixman_region32_fini(&accumulated_damage);
-  
-  /* Clamp to valid range */
-  if (scissor_x < 0) scissor_x = 0;
-  if (scissor_y < 0) scissor_y = 0;
-  if (scissor_width <= 0 || scissor_height <= 0) {
-    /* No valid damage, render full screen */
-    scissor_x = 0;
-    scissor_y = 0;
-    scissor_width = output_width;
-    scissor_height = output_height;
+  /* If no damage, use full screen */
+  pixman_box32_t full_screen = { 0, 0, output_width, output_height };
+  if (num_rects == 0) {
+    damage_rects = &full_screen;
+    num_rects = 1;
   }
 
   /* Initialize shader on first frame when GL context is available (within render pass) */
@@ -165,99 +154,97 @@ HANDLE(frame, void, Output) {
   }
 
   /* Begin GL rendering within the render pass */
-  /* Enable scissor test to only render damaged region */
   glEnable(GL_SCISSOR_TEST);
-  glScissor(scissor_x, scissor_y, scissor_width, scissor_height);
-  
-  glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
-  glClear(GL_COLOR_BUFFER_BIT);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-  useShader(container->windowShader);
-  
-  /* Setup projection for orthographic view */
-  mat4 proj = GLM_MAT4_IDENTITY_INIT;
-  glm_ortho(0, container->wlr_output->width, 0, container->wlr_output->height, -10.0f, 10.0f, proj);
-  set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)proj);
-  
-  mat4 view = GLM_MAT4_IDENTITY_INIT;
-  set4fv(container->windowShader, "view", 1, GL_FALSE, (float*)view);
+  /* Debug frame counter for varying colors */
+  static int frame_counter = 0;
+  frame_counter++;
 
-  /* Render client surfaces with rotation support */
-  /* Render back-to-front: focused view is at front of list, should render last (on top) */
-  float depth = -6;
-  struct View *e;
-  wl_list_for_each_reverse(e, &container->server->views, link) {
-    if (!e->xdg || !e->xdg->surface || !e->xdg->surface->mapped) {
+  /* Render each damage rectangle separately for efficiency */
+  for (int rect_idx = 0; rect_idx < num_rects; rect_idx++) {
+    pixman_box32_t *rect = &damage_rects[rect_idx];
+    
+    int scissor_x = rect->x1;
+    int scissor_y = rect->y1;
+    int scissor_width = rect->x2 - rect->x1;
+    int scissor_height = rect->y2 - rect->y1;
+    
+    /* Clamp to valid range */
+    if (scissor_x < 0) scissor_x = 0;
+    if (scissor_y < 0) scissor_y = 0;
+    if (scissor_width <= 0 || scissor_height <= 0) continue;
+    
+    glScissor(scissor_x, scissor_y, scissor_width, scissor_height);
+    
+    glClearColor(0.8f, 0.8f, 0.8f, 1.0f);
+    glClear(GL_COLOR_BUFFER_BIT);
+
+    useShader(container->windowShader);
+    
+    /* Setup projection for orthographic view */
+    mat4 proj = GLM_MAT4_IDENTITY_INIT;
+    glm_ortho(0, container->wlr_output->width, 0, container->wlr_output->height, -10.0f, 10.0f, proj);
+    set4fv(container->windowShader, "projection", 1, GL_FALSE, (float*)proj);
+    
+    mat4 view_mat = GLM_MAT4_IDENTITY_INIT;
+    set4fv(container->windowShader, "view", 1, GL_FALSE, (float*)view_mat);
+
+    /* Render client surfaces with rotation support */
+    /* Render back-to-front: focused view is at front of list, should render last (on top) */
+    float depth = -6;
+    struct View *e;
+    wl_list_for_each_reverse(e, &container->server->views, link) {
+      if (!e->xdg || !e->xdg->surface || !e->xdg->surface->mapped) {
+        depth++;
+        continue;
+      }
+
+      struct RenderContext renderContext = {
+        .output = container,
+        .view = e,
+        .offsetX = 0,
+        .offsetY = 0,
+        .depth = depth,
+      };
+
+      /* Iterate all surfaces in the xdg tree (toplevel + popups + subsurfaces) */
+      wlr_xdg_surface_for_each_surface(e->xdg, renderSurfaceIter, &renderContext);
       depth++;
-      continue;
     }
 
-    struct RenderContext renderContext = {
-      .output = container,
-      .view = e,
-      .offsetX = 0,
-      .offsetY = 0,
-      .depth = depth,
-    };
+    /* Capture screen content for cursor effect (clamped to screen bounds) */
+    int copy_x = scissor_x;
+    int copy_y = scissor_y;
+    int copy_w = scissor_width;
+    int copy_h = scissor_height;
+    if (copy_x + copy_w > output_width) copy_w = output_width - copy_x;
+    if (copy_y + copy_h > output_height) copy_h = output_height - copy_y;
+    if (copy_w > 0 && copy_h > 0) {
+      glBindTexture(GL_TEXTURE_2D, container->screenTexture);
+      glCopyTexSubImage2D(GL_TEXTURE_2D, 0, copy_x, copy_y, copy_x, copy_y, copy_w, copy_h);
+    }
 
-    /* Iterate all surfaces in the xdg tree (toplevel + popups + subsurfaces) */
-    wlr_xdg_surface_for_each_surface(e->xdg, renderSurfaceIter, &renderContext);
-    depth++;
-  }
-
-  /* Capture screen content for cursor effect (within scissor region) */
-  glBindTexture(GL_TEXTURE_2D, container->screenTexture);
-  glCopyTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 0, 0, 
-                      container->wlr_output->width, container->wlr_output->height);
-
-  /* Draw fancy cursor (keep scissor enabled to avoid drawing stale content) */
-  useShader(container->cursorShader);
-  
-  float cursorX = container->server->cursor->x;
-  float cursorY = container->server->cursor->y;
-  float radius = 14.0f;
-  
-  glUniform2f(glGetUniformLocation(container->cursorShader->ID, "u_resolution"),
-              (float)container->wlr_output->width, (float)container->wlr_output->height);
-  glUniform2f(glGetUniformLocation(container->cursorShader->ID, "u_center"),
-              cursorX, cursorY);
-  glUniform1f(glGetUniformLocation(container->cursorShader->ID, "u_radius"), radius);
-  
-  glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, container->screenTexture);
-  glUniform1i(glGetUniformLocation(container->cursorShader->ID, "u_screen_texture"), 0);
-  
-  /* Draw cursor quad using immediate vertex data */
-  GLfloat cursorVertices[] = {
-    -1.0f, -1.0f,
-     1.0f, -1.0f,
-     1.0f,  1.0f,
-    -1.0f, -1.0f,
-     1.0f,  1.0f,
-    -1.0f,  1.0f,
-  };
-  
-  glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), cursorVertices);
-  glEnableVertexAttribArray(0);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
-  glDisableVertexAttribArray(0);
-  
-  /* Debug: draw damage region overlay (inside scissor - no extra damage needed) */
-  if (container->server->debugDamage) {
-    /* Varying color based on frame for visibility */
-    static int frame_counter = 0;
-    frame_counter++;
-    float r = 0.3f + 0.4f * sinf(frame_counter * 0.1f);
-    float g = 0.3f + 0.4f * sinf(frame_counter * 0.13f + 2.0f);
-    float b = 0.8f;
+    /* Draw fancy cursor */
+    useShader(container->cursorShader);
     
-    useShader(container->debugShader);
-    glUniform4f(glGetUniformLocation(container->debugShader->ID, "u_color"), r, g, b, 0.4f);
+    float cursorX = container->server->cursor->x;
+    float cursorY = container->server->cursor->y;
+    float radius = 14.0f;
     
-    /* Draw filled quad covering entire screen - scissor clips it to damage region */
-    GLfloat debugVertices[] = {
+    glUniform2f(glGetUniformLocation(container->cursorShader->ID, "u_resolution"),
+                (float)container->wlr_output->width, (float)container->wlr_output->height);
+    glUniform2f(glGetUniformLocation(container->cursorShader->ID, "u_center"),
+                cursorX, cursorY);
+    glUniform1f(glGetUniformLocation(container->cursorShader->ID, "u_radius"), radius);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, container->screenTexture);
+    glUniform1i(glGetUniformLocation(container->cursorShader->ID, "u_screen_texture"), 0);
+    
+    /* Draw cursor quad using immediate vertex data */
+    GLfloat cursorVertices[] = {
       -1.0f, -1.0f,
        1.0f, -1.0f,
        1.0f,  1.0f,
@@ -266,11 +253,38 @@ HANDLE(frame, void, Output) {
       -1.0f,  1.0f,
     };
     
-    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), debugVertices);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), cursorVertices);
     glEnableVertexAttribArray(0);
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glDisableVertexAttribArray(0);
+    
+    /* Debug: draw damage region overlay (inside scissor - no extra damage needed) */
+    if (container->server->debugDamage) {
+      float r = 0.3f + 0.4f * sinf(frame_counter * 0.1f + rect_idx);
+      float g = 0.3f + 0.4f * sinf(frame_counter * 0.13f + 2.0f + rect_idx * 0.5f);
+      float b = 0.8f;
+      
+      useShader(container->debugShader);
+      glUniform4f(glGetUniformLocation(container->debugShader->ID, "u_color"), r, g, b, 0.4f);
+      
+      /* Draw filled quad covering entire screen - scissor clips it to damage region */
+      GLfloat debugVertices[] = {
+        -1.0f, -1.0f,
+         1.0f, -1.0f,
+         1.0f,  1.0f,
+        -1.0f, -1.0f,
+         1.0f,  1.0f,
+        -1.0f,  1.0f,
+      };
+      
+      glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), debugVertices);
+      glEnableVertexAttribArray(0);
+      glDrawArrays(GL_TRIANGLES, 0, 6);
+      glDisableVertexAttribArray(0);
+    }
   }
+  
+  pixman_region32_fini(&accumulated_damage);
   
   /* Disable scissor after all rendering is complete */
   glDisable(GL_SCISSOR_TEST);
