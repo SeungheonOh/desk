@@ -189,8 +189,15 @@ HANDLE(newInput, struct wlr_input_device, DeskServer){
 
     struct xkb_context *context =
       xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+    struct xkb_rule_names rules = {
+      .rules = NULL,
+      .model = "pc105",
+      .layout = "us",
+      .variant = "colemak_dh",
+      .options = NULL,
+    };
     struct xkb_keymap *keymap =
-      xkb_keymap_new_from_names(context, NULL, XKB_KEYMAP_COMPILE_NO_FLAGS);
+      xkb_keymap_new_from_names(context, &rules, XKB_KEYMAP_COMPILE_NO_FLAGS);
 
     wlr_keyboard_set_keymap(wlr_keyboard, keymap);
     xkb_keymap_unref(keymap);

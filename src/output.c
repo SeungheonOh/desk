@@ -237,15 +237,25 @@ void renderSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
   /* Setup model matrix with rotation */
   mat4 model = GLM_MAT4_IDENTITY_INIT;
   
-  float px = ctx->view->x + x + width / 2.0f;
-  float py = ctx->view->y + y + height / 2.0f;
+  /* Get view's main surface extents for rotation center */
+  struct wlr_box view_box = {0};
+  wlr_surface_get_extents(ctx->view->xdg->surface, &view_box);
   
-  /* Translate to center, rotate, translate back */
-  glm_translate(model, (vec3){px, py, ctx->depth});
+  /* Rotation pivot is the view's center (main surface center) */
+  float pivot_x = ctx->view->x + view_box.width / 2.0f;
+  float pivot_y = ctx->view->y + view_box.height / 2.0f;
+  
+  /* This surface's position relative to view origin */
+  float surface_x = ctx->view->x + x;
+  float surface_y = ctx->view->y + y;
+  
+  /* Translate to pivot, rotate, translate back, then position surface */
+  glm_translate(model, (vec3){pivot_x, pivot_y, ctx->depth});
   if (ctx->view->rot != 0.0f) {
     glm_rotate_z(model, ctx->view->rot, model);
   }
-  glm_translate(model, (vec3){-width / 2.0f, -height / 2.0f, 0});
+  /* Translate from pivot to surface position */
+  glm_translate(model, (vec3){surface_x - pivot_x, surface_y - pivot_y, 0});
 
   set4fv(shader, "model", 1, GL_FALSE, (float*)model);
 
