@@ -4,11 +4,18 @@
 #include "events.h"
 #include "shader.h"
 
+struct SurfaceTracker {
+  struct wl_listener commit;
+  struct wl_listener destroy;
+  struct DeskServer *server;
+};
+
 typedef struct DeskServer {
   struct wl_display *display;
   struct wlr_backend *backend;
   struct wlr_renderer *renderer;
   struct wlr_allocator *allocator;
+  struct wlr_compositor *compositor;
   const char *socket;
 
   // xdg shell
@@ -40,6 +47,9 @@ typedef struct DeskServer {
   struct wl_list outputs;
   struct wl_listener newOutput;
 
+  // Surface commit tracking (for damage control)
+  struct wl_listener newSurface;
+
   // test
   struct wl_signal resize;
   struct wl_listener resizeHandler;
@@ -70,6 +80,8 @@ typedef struct DeskServer {
 struct DeskServer *newServer();
 void startServer(struct DeskServer*);
 void destroyServer(struct DeskServer*);
+void scheduleRedraw(struct DeskServer*);
+void damageWholeServer(struct DeskServer*);
 
 LISTNER(newXdgSurface, struct wlr_xdg_surface, DeskServer);
 LISTNER(newXdgToplevel, struct wlr_xdg_toplevel, DeskServer);
@@ -83,6 +95,7 @@ LISTNER(cursorButton, struct wlr_pointer_button_event, DeskServer);
 LISTNER(cursorAxis, struct wlr_pointer_axis_event, DeskServer);
 LISTNER(cursorFrame, void, DeskServer);
 LISTNER(newOutput, struct wlr_output, DeskServer);
+LISTNER(newSurface, struct wlr_surface, DeskServer);
 
 LISTNER(resizeHandler, int, DeskServer);
 

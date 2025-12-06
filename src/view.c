@@ -90,6 +90,7 @@ void focusView(struct View *view, struct wlr_surface *surface) {
   }
   
   server->focused_view = view;
+  damageWholeServer(server);
 }
 
 struct View *viewAt(struct DeskServer *server, double lx, double ly,
@@ -161,10 +162,12 @@ HANDLE(map, void, View) {
   
   /* Focus the new view */
   focusView(container, container->xdg->surface);
+  damageWholeServer(container->server);
 }
 HANDLE(unmap, void, View) {
   LOG("UNMAMAMMANNNNNNN");
   wl_list_remove(&container->link);
+  damageWholeServer(container->server);
   destroyView(container);
 }
 HANDLE(destroy, void, View) {

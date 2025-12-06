@@ -25,10 +25,15 @@ typedef struct Output {
 
   GLuint uiTexture;
   GLuint screenTexture;
+
+  struct wlr_damage_ring damage_ring;
+  bool needs_full_damage;
 } Output;
 
 struct Output *mkOutput(struct DeskServer *,struct wlr_output*);
 void destroyOutput(struct Output *);
+void damageOutputWhole(struct Output *);
+void damageOutputBox(struct Output *, struct wlr_box *box);
 
 LISTNER(frame, void, Output);
 LISTNER(present, struct wlr_output_event_present, Output);

@@ -1,10 +1,12 @@
 #include "server.h"
 #include <math.h>
 
+static void getViewDamageBox(struct View *view, struct wlr_box *box);
+static void damageView(struct DeskServer *server, struct View *view);
+
 /* Animation frame callback - updates smooth movement and rotation */
 static int animationFrame(void *data) {
   struct DeskServer *server = (struct DeskServer *)data;
-  bool needs_redraw = false;
   
   struct View *view;
   wl_list_for_each(view, &server->views, link) {
@@ -25,15 +27,16 @@ static int animationFrame(void *data) {
     
     /* Apply velocity */
     if (fabs(view->vel_x) > 0.1f || fabs(view->vel_y) > 0.1f) {
+      damageView(server, view);
       view->x += view->vel_x;
       view->y += view->vel_y;
-      needs_redraw = true;
+      damageView(server, view);
     } else if (fabs(dx) > 0.5f || fabs(dy) > 0.5f) {
-      /* Snap when close and slow */
+      damageView(server, view);
       view->x = view->target_x;
       view->y = view->target_y;
       view->vel_x = view->vel_y = 0;
-      needs_redraw = true;
+      damageView(server, view);
     }
     
     /* Update rotation with velocity - spring physics */
@@ -45,20 +48,14 @@ static int animationFrame(void *data) {
     view->rot_vel *= view->dampening;
     
     if (fabs(view->rot_vel) > 0.001f) {
+      damageView(server, view);
       view->rot += view->rot_vel;
-      needs_redraw = true;
+      damageView(server, view);
     } else if (fabs(d_rot) > 0.01f) {
+      damageView(server, view);
       view->rot = view->target_rot;
       view->rot_vel = 0;
-      needs_redraw = true;
-    }
-  }
-  
-  /* Trigger redraw if anything moved */
-  if (needs_redraw) {
-    struct Output *output;
-    wl_list_for_each(output, &server->outputs, link) {
-      wlr_output_schedule_frame(output->wlr_output);
+      damageView(server, view);
     }
   }
   
@@ -85,9 +82,11 @@ struct DeskServer *newServer() {
 
   ASSERTN(server->allocator = wlr_allocator_autocreate(server->backend, server->renderer));
 
-  wlr_compositor_create(server->display, 5, server->renderer);
+  server->compositor = wlr_compositor_create(server->display, 5, server->renderer);
   wlr_subcompositor_create(server->display);
   wlr_data_device_manager_create(server->display);
+
+  ATTACH(DeskServer, server, server->compositor->events.new_surface, newSurface);
 
   server->outputLayout = wlr_output_layout_create(server->display);
 
@@ -152,6 +151,123 @@ void destroyServer(struct DeskServer *server) {
 
   wlr_backend_destroy(server->backend);
   wl_display_destroy(server->display);
+}
+
+void scheduleRedraw(struct DeskServer *server) {
+  struct Output *output;
+  wl_list_for_each(output, &server->outputs, link) {
+    wlr_output_schedule_frame(output->wlr_output);
+  }
+}
+
+void damageWholeServer(struct DeskServer *server) {
+  struct Output *output;
+  wl_list_for_each(output, &server->outputs, link) {
+    damageOutputWhole(output);
+  }
+}
+
+static void getViewDamageBox(struct View *view, struct wlr_box *box) {
+  if (!view->xdg || !view->xdg->surface) {
+    *box = (struct wlr_box){0, 0, 0, 0};
+    return;
+  }
+
+  struct wlr_box surface_box;
+  wlr_surface_get_extents(view->xdg->surface, &surface_box);
+
+  float cx = view->x + surface_box.width / 2.0f;
+  float cy = view->y + surface_box.height / 2.0f;
+  float hw = surface_box.width / 2.0f;
+  float hh = surface_box.height / 2.0f;
+
+  float cos_r = cosf(view->rot);
+  float sin_r = sinf(view->rot);
+
+  float corners[4][2] = {
+    {-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}
+  };
+
+  float min_x = cx, max_x = cx, min_y = cy, max_y = cy;
+  for (int i = 0; i < 4; i++) {
+    float rx = corners[i][0] * cos_r - corners[i][1] * sin_r + cx;
+    float ry = corners[i][0] * sin_r + corners[i][1] * cos_r + cy;
+    if (rx < min_x) min_x = rx;
+    if (rx > max_x) max_x = rx;
+    if (ry < min_y) min_y = ry;
+    if (ry > max_y) max_y = ry;
+  }
+
+  box->x = (int)floorf(min_x) - 1;
+  box->y = (int)floorf(min_y) - 1;
+  box->width = (int)ceilf(max_x - min_x) + 2;
+  box->height = (int)ceilf(max_y - min_y) + 2;
+}
+
+static void damageView(struct DeskServer *server, struct View *view) {
+  struct wlr_box box;
+  getViewDamageBox(view, &box);
+  
+  struct Output *output;
+  wl_list_for_each(output, &server->outputs, link) {
+    damageOutputBox(output, &box);
+  }
+}
+
+static void damageAllOutputs(struct DeskServer *server) {
+  struct Output *output;
+  wl_list_for_each(output, &server->outputs, link) {
+    damageOutputWhole(output);
+  }
+}
+
+static void damageCursor(struct DeskServer *server, double x, double y) {
+  int radius = 20;
+  struct wlr_box box = {
+    .x = (int)x - radius,
+    .y = (int)y - radius,
+    .width = radius * 2,
+    .height = radius * 2,
+  };
+  struct Output *output;
+  wl_list_for_each(output, &server->outputs, link) {
+    damageOutputBox(output, &box);
+  }
+}
+
+static void surfaceCommitHandler(struct wl_listener *listener, void *data) {
+  struct SurfaceTracker *tracker = wl_container_of(listener, tracker, commit);
+  struct wlr_surface *surface = data;
+  
+  struct wlr_surface *root = wlr_surface_get_root_surface(surface);
+  
+  struct View *view;
+  wl_list_for_each(view, &tracker->server->views, link) {
+    if (view->xdg && view->xdg->surface == root) {
+      damageView(tracker->server, view);
+      return;
+    }
+  }
+  
+  damageAllOutputs(tracker->server);
+}
+
+static void surfaceDestroyHandler(struct wl_listener *listener, void *data) {
+  struct SurfaceTracker *tracker = wl_container_of(listener, tracker, destroy);
+  wl_list_remove(&tracker->commit.link);
+  wl_list_remove(&tracker->destroy.link);
+  free(tracker);
+}
+
+HANDLE(newSurface, struct wlr_surface, DeskServer) {
+  struct SurfaceTracker *tracker = calloc(1, sizeof(struct SurfaceTracker));
+  tracker->server = container;
+  
+  tracker->commit.notify = surfaceCommitHandler;
+  wl_signal_add(&data->events.commit, &tracker->commit);
+  
+  tracker->destroy.notify = surfaceDestroyHandler;
+  wl_signal_add(&data->events.destroy, &tracker->destroy);
 }
 
 HANDLE(newXdgSurface, struct wlr_xdg_surface, DeskServer){
@@ -248,8 +364,10 @@ static void processCursorMotion(struct DeskServer *server, uint32_t time) {
 }
 
 HANDLE(cursorMotion, struct wlr_pointer_motion_event, DeskServer){
+  damageCursor(container, container->cursor->x, container->cursor->y);
   wlr_cursor_move(container->cursor, &data->pointer->base,
 		  data->delta_x, data->delta_y);
+  damageCursor(container, container->cursor->x, container->cursor->y);
   
   /* Update window position if in move mode */
   if (container->moveMode && container->grabbed_view) {
@@ -264,7 +382,9 @@ HANDLE(cursorMotion, struct wlr_pointer_motion_event, DeskServer){
   wlr_seat_pointer_notify_frame(container->seat);
 }
 HANDLE(cursorMotionAbsolute, struct wlr_pointer_motion_absolute_event, DeskServer){
+  damageCursor(container, container->cursor->x, container->cursor->y);
   wlr_cursor_warp_absolute(container->cursor, &data->pointer->base, data->x, data->y);
+  damageCursor(container, container->cursor->x, container->cursor->y);
   
   /* Update window position if in move mode */
   if (container->moveMode && container->grabbed_view) {
@@ -375,6 +495,7 @@ HANDLE(newOutput, struct wlr_output, DeskServer){
   wlr_output_layout_add_auto(container->outputLayout, data);
 
   mkOutput(container, data);
+  wlr_output_schedule_frame(data);
 }
 
 

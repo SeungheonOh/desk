@@ -9,6 +9,9 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
   output->shader_initialized = false;
   output->windowShader = NULL;
   output->frame_pending = false;
+  output->needs_full_damage = true;
+
+  wlr_damage_ring_init(&output->damage_ring);
 
   ATTACH(Output, output, data->events.frame, frame);
   ATTACH(Output, output, data->events.present, present);
@@ -21,12 +24,27 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
 }
 
 void destroyOutput(struct Output *container){
+  wlr_damage_ring_finish(&container->damage_ring);
   wl_list_remove(&container->frame.link);
   wl_list_remove(&container->present.link);
   wl_list_remove(&container->requestState.link);
   wl_list_remove(&container->destroy.link);
   wl_list_remove(&container->link);
   free(container);
+}
+
+void damageOutputWhole(struct Output *output) {
+  struct wlr_box box = {
+    .x = 0,
+    .y = 0,
+    .width = output->wlr_output->width,
+    .height = output->wlr_output->height,
+  };
+  wlr_damage_ring_add_box(&output->damage_ring, &box);
+}
+
+void damageOutputBox(struct Output *output, struct wlr_box *box) {
+  wlr_damage_ring_add_box(&output->damage_ring, box);
 }
 
 HANDLE(frame, void, Output) {
@@ -38,12 +56,22 @@ HANDLE(frame, void, Output) {
   struct View *v;
   wl_list_for_each(v, &container->server->views, link) {
     view_count++;
-    if(v->fadeIn > 0) v->fadeIn -= 0.1;
+    if(v->fadeIn > 0) {
+      v->fadeIn -= 0.1f;
+      if(v->fadeIn > 0.0f) {
+        damageOutputWhole(container);
+      }
+    }
   }
   static int once = 1;
   if(once && view_count == 0) {
     LOG("WARNING: No views to render");
     once = 0;
+  }
+
+  if (container->needs_full_damage) {
+    damageOutputWhole(container);
+    container->needs_full_damage = false;
   }
 
   struct wlr_output_state state;
@@ -54,6 +82,8 @@ HANDLE(frame, void, Output) {
     wlr_output_state_finish(&state);
     return;
   }
+
+  pixman_region32_clear(&container->damage_ring.current);
 
   /* Initialize shader on first frame when GL context is available (within render pass) */
   if (!container->shader_initialized) {
