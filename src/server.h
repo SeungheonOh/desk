@@ -75,6 +75,9 @@ typedef struct DeskServer {
   
   // Animation loop
   struct wl_event_source *animation_timer;
+  
+  // Debug mode
+  bool debugDamage;
 } DeskServer;
 
 struct DeskServer *newServer();

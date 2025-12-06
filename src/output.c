@@ -12,11 +12,7 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
   output->needs_full_damage = true;
 
   wlr_damage_ring_init(&output->damage_ring);
-  
-  for (int i = 0; i < 3; i++) {
-    pixman_region32_init(&output->damage_history[i]);
-  }
-  output->damage_history_index = 0;
+  pixman_region32_init(&output->prev_damage);
 
   ATTACH(Output, output, data->events.frame, frame);
   ATTACH(Output, output, data->events.present, present);
@@ -30,9 +26,7 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
 
 void destroyOutput(struct Output *container){
   wlr_damage_ring_finish(&container->damage_ring);
-  for (int i = 0; i < 3; i++) {
-    pixman_region32_fini(&container->damage_history[i]);
-  }
+  pixman_region32_fini(&container->prev_damage);
   wl_list_remove(&container->frame.link);
   wl_list_remove(&container->present.link);
   wl_list_remove(&container->requestState.link);
@@ -81,6 +75,8 @@ HANDLE(frame, void, Output) {
     damageOutputWhole(container);
     container->needs_full_damage = false;
   }
+  
+
 
   struct wlr_output_state state;
   wlr_output_state_init(&state);
@@ -94,18 +90,14 @@ HANDLE(frame, void, Output) {
   int output_width = container->wlr_output->width;
   int output_height = container->wlr_output->height;
   
-  /* Store current frame's damage in history and get accumulated damage */
-  int curr_idx = container->damage_history_index;
-  pixman_region32_copy(&container->damage_history[curr_idx], &container->damage_ring.current);
-  pixman_region32_clear(&container->damage_ring.current);
-  container->damage_history_index = (curr_idx + 1) % 3;
-  
-  /* Accumulate damage from last 3 frames to handle triple buffering */
+  /* Accumulate current + previous frame damage for double buffering */
   pixman_region32_t accumulated_damage;
   pixman_region32_init(&accumulated_damage);
-  for (int i = 0; i < 3; i++) {
-    pixman_region32_union(&accumulated_damage, &accumulated_damage, &container->damage_history[i]);
-  }
+  pixman_region32_union(&accumulated_damage, &container->damage_ring.current, &container->prev_damage);
+  
+  /* Save current damage for next frame, then clear */
+  pixman_region32_copy(&container->prev_damage, &container->damage_ring.current);
+  pixman_region32_clear(&container->damage_ring.current);
   
   /* Get damage bounding box for scissor optimization */
   pixman_box32_t *damage_extents = pixman_region32_extents(&accumulated_damage);
@@ -146,6 +138,12 @@ HANDLE(frame, void, Output) {
    container->cursorShader = newShader(CURSOR_VERTEX_SHADER, CURSOR_FRAGMENT_SHADER);
    if (!container->cursorShader) {
      LOG("Failed to load cursor shader, skipping frame");
+     wlr_output_state_finish(&state);
+     return;
+   }
+   container->debugShader = newShader(DEBUG_VERTEX_SHADER, DEBUG_FRAGMENT_SHADER);
+   if (!container->debugShader) {
+     LOG("Failed to load debug shader, skipping frame");
      wlr_output_state_finish(&state);
      return;
    }
@@ -245,6 +243,34 @@ HANDLE(frame, void, Output) {
   glEnableVertexAttribArray(0);
   glDrawArrays(GL_TRIANGLES, 0, 6);
   glDisableVertexAttribArray(0);
+  
+  /* Debug: draw damage region overlay (inside scissor - no extra damage needed) */
+  if (container->server->debugDamage) {
+    /* Varying color based on frame for visibility */
+    static int frame_counter = 0;
+    frame_counter++;
+    float r = 0.3f + 0.4f * sinf(frame_counter * 0.1f);
+    float g = 0.3f + 0.4f * sinf(frame_counter * 0.13f + 2.0f);
+    float b = 0.8f;
+    
+    useShader(container->debugShader);
+    glUniform4f(glGetUniformLocation(container->debugShader->ID, "u_color"), r, g, b, 0.4f);
+    
+    /* Draw filled quad covering entire screen - scissor clips it to damage region */
+    GLfloat debugVertices[] = {
+      -1.0f, -1.0f,
+       1.0f, -1.0f,
+       1.0f,  1.0f,
+      -1.0f, -1.0f,
+       1.0f,  1.0f,
+      -1.0f,  1.0f,
+    };
+    
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), debugVertices);
+    glEnableVertexAttribArray(0);
+    glDrawArrays(GL_TRIANGLES, 0, 6);
+    glDisableVertexAttribArray(0);
+  }
   
   /* Disable scissor after all rendering is complete */
   glDisable(GL_SCISSOR_TEST);

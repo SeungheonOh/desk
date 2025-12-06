@@ -95,6 +95,13 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
       }
       return;
     }
+    
+    if(syms[i] == XKB_KEY_d && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+      container->server->debugDamage = !container->server->debugDamage;
+      LOG("Debug damage: %s", container->server->debugDamage ? "ON" : "OFF");
+      damageWholeServer(container->server);
+      return;
+    }
   }
 }
 HANDLE(destroy, void, Keyboard){

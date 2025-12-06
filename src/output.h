@@ -19,6 +19,7 @@ typedef struct Output {
   struct shader *windowShader;
   struct shader *windowShaderExternal;
   struct shader *cursorShader;
+  struct shader *debugShader;
   struct wlr_render_pass *pass;
   bool shader_initialized;
   bool frame_pending;
@@ -29,10 +30,9 @@ typedef struct Output {
   struct wlr_damage_ring damage_ring;
   bool needs_full_damage;
   
-  /* Track damage history for buffer rotation (triple buffering needs 3 frames) */
-  pixman_region32_t damage_history[3];
-  int damage_history_index;
-} Output;
+  /* Track previous frame damage for double buffering */
+  pixman_region32_t prev_damage;
+  } Output;
 
 struct Output *mkOutput(struct DeskServer *,struct wlr_output*);
 void destroyOutput(struct Output *);

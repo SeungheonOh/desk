@@ -3,3 +3,5 @@
 #define WINDOW_FRAGMENT_SHADER_EXTERNAL (const char*)"./src/shader/frag_external.glsl"
 #define CURSOR_VERTEX_SHADER (const char*)"./src/shader/cursor_vert.glsl"
 #define CURSOR_FRAGMENT_SHADER (const char*)"./src/shader/cursor_frag.glsl"
+#define DEBUG_VERTEX_SHADER (const char*)"./src/shader/debug_vert.glsl"
+#define DEBUG_FRAGMENT_SHADER (const char*)"./src/shader/debug_frag.glsl"

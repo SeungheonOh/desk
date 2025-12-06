@@ -129,6 +129,7 @@ struct DeskServer *newServer() {
   server->moveMode = false;
   server->grabbed_view = NULL;
   server->animation_timer = NULL;
+  server->debugDamage = false;
 
   return server;
 }
