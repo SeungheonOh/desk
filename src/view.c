@@ -14,6 +14,10 @@ struct View *mkView(struct DeskServer *container, struct wlr_xdg_surface *data){
   ATTACH(View, view, data->surface->events.destroy, destroy);
   ATTACH(View, view, data->surface->events.commit, commit);
 
+  if (data->toplevel) {
+    ATTACH(View, view, data->toplevel->events.request_move, requestMove);
+  }
+
   view->fadeIn = 1;
   view->xdg->data = view;
   view->needs_configure = true;
@@ -42,6 +46,9 @@ void destroyView(struct View *view){
   wl_list_remove(&view->unmap.link);
   wl_list_remove(&view->destroy.link);
   wl_list_remove(&view->commit.link);
+  if (view->xdg && view->xdg->toplevel) {
+    wl_list_remove(&view->requestMove.link);
+  }
   
   free(view);
 }
@@ -163,6 +170,17 @@ HANDLE(unmap, void, View) {
 HANDLE(destroy, void, View) {
 }
 HANDLE(requestMove, void, View) {
+  struct DeskServer *server = container->server;
+  
+  server->moveMode = true;
+  server->grabbed_view = container;
+  server->grab_x = server->cursor->x;
+  server->grab_y = server->cursor->y;
+  server->grab_view_x = container->x;
+  server->grab_view_y = container->y;
+  
+  wl_list_remove(&container->link);
+  wl_list_insert(&server->views, &container->link);
 }
 HANDLE(requestResize, void, View) {
 }
