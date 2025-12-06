@@ -43,10 +43,12 @@ void damageOutputWhole(struct Output *output) {
     .height = output->wlr_output->height,
   };
   wlr_damage_ring_add_box(&output->damage_ring, &box);
+  wlr_output_schedule_frame(output->wlr_output);
 }
 
 void damageOutputBox(struct Output *output, struct wlr_box *box) {
   wlr_damage_ring_add_box(&output->damage_ring, box);
+  wlr_output_schedule_frame(output->wlr_output);
 }
 
 HANDLE(frame, void, Output) {
@@ -103,11 +105,13 @@ HANDLE(frame, void, Output) {
   int num_rects = 0;
   pixman_box32_t *damage_rects = pixman_region32_rectangles(&accumulated_damage, &num_rects);
   
-  /* If no damage, use full screen */
-  pixman_box32_t full_screen = { 0, 0, output_width, output_height };
+  /* If no damage, skip rendering entirely */
   if (num_rects == 0) {
-    damage_rects = &full_screen;
-    num_rects = 1;
+    pixman_region32_fini(&accumulated_damage);
+    wlr_render_pass_submit(container->pass);
+    wlr_output_commit_state(container->wlr_output, &state);
+    wlr_output_state_finish(&state);
+    return;
   }
 
   /* Initialize shader on first frame when GL context is available (within render pass) */
@@ -306,6 +310,10 @@ HANDLE(frame, void, Output) {
 
 HANDLE(present, struct wlr_output_event_present, Output) {
   container->frame_pending = false;
+  /* Only schedule next frame if there's pending damage */
+  if (!pixman_region32_not_empty(&container->damage_ring.current)) {
+    return;
+  }
   wlr_output_schedule_frame(container->wlr_output);
 }
 
