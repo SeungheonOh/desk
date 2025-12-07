@@ -79,7 +79,12 @@ HANDLE(key, struct wlr_keyboard_key_event, Keyboard){
       LOG("running foot");
       spawn_wayland_client(container->server, "./test_click.py");
       return;
-    }        
+    }
+    if(syms[i] == XKB_KEY_x && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
+      LOG("running rofi");
+      spawn_wayland_client(container->server, "rofi -show drun");
+      return;
+    }            
 
     if(syms[i] == XKB_KEY_r && altPressed && data->state == WL_KEYBOARD_KEY_STATE_PRESSED) {
       LOG("re-compiling shader, %d", wl_list_length(&container->server->outputs));

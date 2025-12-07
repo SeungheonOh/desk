@@ -181,29 +181,34 @@ static void getViewDamageBox(struct View *view, struct wlr_box *box) {
   struct wlr_box surface_box;
   wlr_surface_get_extents(view->xdg->surface, &surface_box);
 
-  /* surface_box.x/y can be negative for subsurfaces extending above/left */
+  /* Rotation pivot matches rendering: center of main surface extents */
+  float pivot_x = view->x + surface_box.width / 2.0f;
+  float pivot_y = view->y + surface_box.height / 2.0f;
+
+  float cos_r = cosf(view->rot);
+  float sin_r = sinf(view->rot);
+
+  /* Compute axis-aligned bounding box by rotating all 4 corners of extents around pivot */
   float ext_x = view->x + surface_box.x;
   float ext_y = view->y + surface_box.y;
   float ext_w = surface_box.width;
   float ext_h = surface_box.height;
 
-  /* Center of the full extent box */
-  float cx = ext_x + ext_w / 2.0f;
-  float cy = ext_y + ext_h / 2.0f;
-  float hw = ext_w / 2.0f;
-  float hh = ext_h / 2.0f;
-
-  float cos_r = cosf(view->rot);
-  float sin_r = sinf(view->rot);
-
+  /* Four corners of the extent box in absolute coordinates */
   float corners[4][2] = {
-    {-hw, -hh}, {hw, -hh}, {hw, hh}, {-hw, hh}
+    {ext_x, ext_y},
+    {ext_x + ext_w, ext_y},
+    {ext_x + ext_w, ext_y + ext_h},
+    {ext_x, ext_y + ext_h}
   };
 
-  float min_x = cx, max_x = cx, min_y = cy, max_y = cy;
+  float min_x = pivot_x, max_x = pivot_x, min_y = pivot_y, max_y = pivot_y;
   for (int i = 0; i < 4; i++) {
-    float rx = corners[i][0] * cos_r - corners[i][1] * sin_r + cx;
-    float ry = corners[i][0] * sin_r + corners[i][1] * cos_r + cy;
+    /* Rotate corner around pivot */
+    float dx = corners[i][0] - pivot_x;
+    float dy = corners[i][1] - pivot_y;
+    float rx = dx * cos_r - dy * sin_r + pivot_x;
+    float ry = dx * sin_r + dy * cos_r + pivot_y;
     if (rx < min_x) min_x = rx;
     if (rx > max_x) max_x = rx;
     if (ry < min_y) min_y = ry;
