@@ -538,11 +538,15 @@ HANDLE(cursorAxis, struct wlr_pointer_axis_event, DeskServer){
     return;
   }
   
+  /* Ensure pointer focus is set before sending axis events */
+  processCursorMotion(container, data->time_msec);
+  
   /* Forward scroll events to client */
   wlr_seat_pointer_notify_axis(container->seat, data->time_msec,
                                 data->orientation, data->delta,
                                 data->delta_discrete, data->source,
                                 data->relative_direction);
+  wlr_seat_pointer_notify_frame(container->seat);
 }
 
 HANDLE(cursorFrame, void, DeskServer){

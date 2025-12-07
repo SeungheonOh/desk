@@ -46,9 +46,7 @@ void destroyView(struct View *view){
   wl_list_remove(&view->unmap.link);
   wl_list_remove(&view->destroy.link);
   wl_list_remove(&view->commit.link);
-  if (view->xdg && view->xdg->toplevel) {
-    wl_list_remove(&view->requestMove.link);
-  }
+  wl_list_remove(&view->requestMove.link);
   
   free(view);
 }
