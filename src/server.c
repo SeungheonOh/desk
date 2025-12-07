@@ -247,6 +247,17 @@ static void damageCursor(struct DeskServer *server, double x, double y) {
   }
 }
 
+static void damageLayerSurfaceBox(struct LayerSurface *ls) {
+  if (!ls || !ls->output || !ls->layer_surface->surface) {
+    return;
+  }
+  struct wlr_box box;
+  wlr_surface_get_extents(ls->layer_surface->surface, &box);
+  box.x += ls->x;
+  box.y += ls->y;
+  damageOutputBox(ls->output, &box);
+}
+
 static void surfaceCommitHandler(struct wl_listener *listener, void *data) {
   struct SurfaceTracker *tracker = wl_container_of(listener, tracker, commit);
   struct wlr_surface *surface = data;
@@ -258,6 +269,20 @@ static void surfaceCommitHandler(struct wl_listener *listener, void *data) {
     if (view->xdg && view->xdg->surface == root) {
       damageView(tracker->server, view);
       return;
+    }
+  }
+  
+  /* Check layer surfaces */
+  struct Output *output;
+  wl_list_for_each(output, &tracker->server->outputs, link) {
+    for (int layer = 0; layer < 4; layer++) {
+      struct LayerSurface *ls;
+      wl_list_for_each(ls, &output->layers[layer], link) {
+        if (ls->layer_surface->surface == root) {
+          damageLayerSurfaceBox(ls);
+          return;
+        }
+      }
     }
   }
   

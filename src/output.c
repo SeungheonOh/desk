@@ -101,6 +101,16 @@ HANDLE(frame, void, Output) {
   int output_width = container->wlr_output->width;
   int output_height = container->wlr_output->height;
   
+  /* Capture current frame damage for debug display before modifications */
+  pixman_region32_t debug_damage;
+  pixman_region32_init(&debug_damage);
+  if (container->server->debugDamage) {
+    pixman_region32_copy(&debug_damage, &container->damage_ring.current);
+    /* Force full redraw when debug mode is on to avoid double-buffer artifacts */
+    struct wlr_box full = { 0, 0, output_width, output_height };
+    wlr_damage_ring_add_box(&container->damage_ring, &full);
+  }
+  
   /* Accumulate current + previous frame damage for double buffering */
   pixman_region32_t accumulated_damage;
   pixman_region32_init(&accumulated_damage);
@@ -170,10 +180,6 @@ HANDLE(frame, void, Output) {
   glEnable(GL_SCISSOR_TEST);
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-  /* Debug frame counter for varying colors */
-  static int frame_counter = 0;
-  frame_counter++;
 
   /* Render each damage rectangle separately for efficiency */
   for (int rect_idx = 0; rect_idx < num_rects; rect_idx++) {
@@ -284,32 +290,49 @@ HANDLE(frame, void, Output) {
     glDrawArrays(GL_TRIANGLES, 0, 6);
     glDisableVertexAttribArray(0);
     
-    /* Debug: draw damage region overlay (inside scissor - no extra damage needed) */
-    if (container->server->debugDamage) {
-      float r = 0.3f + 0.4f * sinf(frame_counter * 0.1f + rect_idx);
-      float g = 0.3f + 0.4f * sinf(frame_counter * 0.13f + 2.0f + rect_idx * 0.5f);
-      float b = 0.8f;
-      
+  }
+  
+  /* Debug: draw damage region overlay after all rendering */
+  if (container->server->debugDamage) {
+    int debug_num_rects = 0;
+    pixman_box32_t *debug_rects = pixman_region32_rectangles(&debug_damage, &debug_num_rects);
+    
+    if (debug_num_rects > 0) {
       useShader(container->debugShader);
-      glUniform4f(glGetUniformLocation(container->debugShader->ID, "u_color"), r, g, b, 0.4f);
+      glUniform4f(glGetUniformLocation(container->debugShader->ID, "u_color"), 1.0f, 0.0f, 0.0f, 0.5f);
       
-      /* Draw filled quad covering entire screen - scissor clips it to damage region */
-      GLfloat debugVertices[] = {
-        -1.0f, -1.0f,
-         1.0f, -1.0f,
-         1.0f,  1.0f,
-        -1.0f, -1.0f,
-         1.0f,  1.0f,
-        -1.0f,  1.0f,
-      };
-      
-      glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), debugVertices);
-      glEnableVertexAttribArray(0);
-      glDrawArrays(GL_TRIANGLES, 0, 6);
-      glDisableVertexAttribArray(0);
+      for (int rect_idx = 0; rect_idx < debug_num_rects; rect_idx++) {
+        pixman_box32_t *rect = &debug_rects[rect_idx];
+        
+        int scissor_x = rect->x1;
+        int scissor_y = rect->y1;
+        int scissor_width = rect->x2 - rect->x1;
+        int scissor_height = rect->y2 - rect->y1;
+        
+        if (scissor_x < 0) scissor_x = 0;
+        if (scissor_y < 0) scissor_y = 0;
+        if (scissor_width <= 0 || scissor_height <= 0) continue;
+        
+        glScissor(scissor_x, scissor_y, scissor_width, scissor_height);
+        
+        GLfloat debugVertices[] = {
+          -1.0f, -1.0f,
+           1.0f, -1.0f,
+           1.0f,  1.0f,
+          -1.0f, -1.0f,
+           1.0f,  1.0f,
+          -1.0f,  1.0f,
+        };
+        
+        glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 2 * sizeof(GLfloat), debugVertices);
+        glEnableVertexAttribArray(0);
+        glDrawArrays(GL_TRIANGLES, 0, 6);
+        glDisableVertexAttribArray(0);
+      }
     }
   }
   
+  pixman_region32_fini(&debug_damage);
   pixman_region32_fini(&accumulated_damage);
   
   /* Disable scissor after all rendering is complete */

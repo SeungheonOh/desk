@@ -2,6 +2,19 @@
 #include "server.h"
 #include "output.h"
 
+static void damageLayerSurface(struct LayerSurface *ls) {
+  if (!ls || !ls->output || !ls->layer_surface->surface) {
+    return;
+  }
+
+  struct wlr_box box;
+  wlr_surface_get_extents(ls->layer_surface->surface, &box);
+  box.x += ls->x;
+  box.y += ls->y;
+
+  damageOutputBox(ls->output, &box);
+}
+
 struct LayerSurface *mkLayerSurface(struct DeskServer *server,
                                      struct wlr_layer_surface_v1 *wlr_layer_surface) {
   struct LayerSurface *layer_surface = calloc(1, sizeof(struct LayerSurface));
@@ -163,27 +176,27 @@ HANDLE(map, void, LayerSurface) {
     focusLayerSurface(container);
   }
   
-  damageWholeServer(container->server);
+  damageLayerSurface(container);
 }
 
 HANDLE(unmap, void, LayerSurface) {
   LOG("Layer surface unmapped");
+  damageLayerSurface(container);
   container->mapped = false;
   
   struct Output *output = container->output;
   if (output) {
     arrangeLayerSurfaces(output);
   }
-  damageWholeServer(container->server);
 }
 
 HANDLE(destroy, void, LayerSurface) {
   LOG("Layer surface destroyed");
+  damageLayerSurface(container);
   struct Output *output = container->output;
   destroyLayerSurface(container);
   if (output) {
     arrangeLayerSurfaces(output);
-    damageOutputWhole(output);
   }
 }
 
@@ -196,13 +209,14 @@ HANDLE(commit, struct wlr_surface, LayerSurface) {
 
   uint32_t layer = wlr_ls->current.layer;
   if (layer != container->layer) {
+    damageLayerSurface(container);
     wl_list_remove(&container->link);
     container->layer = layer;
     wl_list_insert(&container->output->layers[layer], &container->link);
   }
 
   arrangeLayerSurfaces(container->output);
-  damageWholeServer(container->server);
+  damageLayerSurface(container);
 }
 
 HANDLE(new_popup, struct wlr_xdg_popup, LayerSurface) {
