@@ -25,6 +25,10 @@ typedef struct DeskServer {
   struct wl_listener newXdgPopup;
   struct wl_list views;
 
+  // layer shell
+  struct wlr_layer_shell_v1 *layerShell;
+  struct wl_listener newLayerSurface;
+
   // Input
   struct wlr_seat *seat;
   struct wl_listener newInput;
@@ -89,6 +93,7 @@ void damageWholeServer(struct DeskServer*);
 LISTNER(newXdgSurface, struct wlr_xdg_surface, DeskServer);
 LISTNER(newXdgToplevel, struct wlr_xdg_toplevel, DeskServer);
 LISTNER(newXdgPopup, struct wlr_xdg_popup, DeskServer);
+LISTNER(newLayerSurface, struct wlr_layer_surface_v1, DeskServer);
 LISTNER(newInput, struct wlr_input_device, DeskServer);
 LISTNER(requestCursor, struct wlr_seat_pointer_request_set_cursor_event, DeskServer);
 LISTNER(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskServer);

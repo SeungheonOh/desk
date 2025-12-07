@@ -1,4 +1,5 @@
 #include "server.h"
+#include "layer.h"
 #include <math.h>
 
 static void getViewDamageBox(struct View *view, struct wlr_box *box);
@@ -98,6 +99,9 @@ struct DeskServer *newServer() {
   ATTACH(DeskServer, server, server->xdgShell->events.new_surface, newXdgSurface);
   ATTACH(DeskServer, server, server->xdgShell->events.new_toplevel, newXdgToplevel);
   ATTACH(DeskServer, server, server->xdgShell->events.new_popup, newXdgPopup);
+
+  server->layerShell = wlr_layer_shell_v1_create(server->display, 4);
+  ATTACH(DeskServer, server, server->layerShell->events.new_surface, newLayerSurface);
 
   wl_list_init(&server->keyboards);
 
@@ -301,6 +305,12 @@ HANDLE(newXdgToplevel, struct wlr_xdg_toplevel, DeskServer){
 
 HANDLE(newXdgPopup, struct wlr_xdg_popup, DeskServer){
 }
+
+HANDLE(newLayerSurface, struct wlr_layer_surface_v1, DeskServer){
+  LOG("New layer surface: namespace=%s", data->namespace);
+  mkLayerSurface(container, data);
+}
+
 HANDLE(newInput, struct wlr_input_device, DeskServer){
   switch (data->type) {
   case WLR_INPUT_DEVICE_KEYBOARD:
@@ -358,6 +368,17 @@ HANDLE(requestSetSelection, struct wlr_seat_request_set_selection_event, DeskSer
 static void processCursorMotion(struct DeskServer *server, uint32_t time) {
   double sx, sy;
   struct wlr_surface *surface = NULL;
+  
+  /* Check layer surfaces first (they render on top) */
+  struct LayerSurface *layer = layerSurfaceAt(server, server->cursor->x, 
+                                               server->cursor->y, &surface, &sx, &sy);
+  if (layer) {
+    wlr_seat_pointer_notify_enter(server->seat, surface, sx, sy);
+    wlr_seat_pointer_notify_motion(server->seat, time, sx, sy);
+    return;
+  }
+  
+  /* Check regular views */
   struct View *view = viewAt(server, server->cursor->x, server->cursor->y, 
                               &surface, &sx, &sy);
   
@@ -415,9 +436,22 @@ HANDLE(cursorButton, struct wlr_pointer_button_event, DeskServer){
     container->sx = container->cursor->x;
     container->sy = container->cursor->y;
     
-    /* Focus view under cursor */
     double sx, sy;
     struct wlr_surface *surface = NULL;
+    
+    /* Check layer surfaces first */
+    struct LayerSurface *layer = layerSurfaceAt(container, container->cursor->x,
+                                                 container->cursor->y, &surface, &sx, &sy);
+    if (layer) {
+      if (layer->layer_surface->current.keyboard_interactive) {
+        focusLayerSurface(layer);
+      }
+      wlr_seat_pointer_notify_button(container->seat, data->time_msec,
+                                      data->button, data->state);
+      return;
+    }
+    
+    /* Focus view under cursor */
     struct View *view = viewAt(container, container->cursor->x, 
                                 container->cursor->y, &surface, &sx, &sy);
     if (view) {

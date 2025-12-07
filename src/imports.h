@@ -25,6 +25,7 @@
 #include <wlr/types/wlr_xcursor_manager.h>
 #include <wlr/render/wlr_texture.h>
 #include <wlr/types/wlr_xdg_shell.h>
+#include <wlr/types/wlr_layer_shell_v1.h>
 #include <wlr/util/log.h>
 #include <wlr/render/egl.h>
 #include <wlr/render/gles2.h>

@@ -1,6 +1,9 @@
 #include "output.h"
+#include "layer.h"
 #include "aux.h"
 #include <math.h>
+
+static void renderLayer(struct Output *output, struct wl_list *layer_list, float *depth);
 
 struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
   struct Output *output = calloc(1, sizeof(struct Output));
@@ -13,6 +16,12 @@ struct Output *mkOutput(struct DeskServer *container, struct wlr_output* data){
 
   wlr_damage_ring_init(&output->damage_ring);
   pixman_region32_init(&output->prev_damage);
+
+  for (int i = 0; i < 4; i++) {
+    wl_list_init(&output->layers[i]);
+  }
+
+  data->data = output;
 
   ATTACH(Output, output, data->events.frame, frame);
   ATTACH(Output, output, data->events.present, present);
@@ -195,9 +204,16 @@ HANDLE(frame, void, Output) {
     mat4 view_mat = GLM_MAT4_IDENTITY_INIT;
     set4fv(container->windowShader, "view", 1, GL_FALSE, (float*)view_mat);
 
-    /* Render client surfaces with rotation support */
-    /* Render back-to-front: focused view is at front of list, should render last (on top) */
-    float depth = -6;
+    /* Render in layer order: BACKGROUND -> BOTTOM -> views -> TOP -> OVERLAY */
+    float depth = -9;
+
+    /* BACKGROUND layer (layer 0) */
+    renderLayer(container, &container->layers[ZWLR_LAYER_SHELL_V1_LAYER_BACKGROUND], &depth);
+
+    /* BOTTOM layer (layer 1) */
+    renderLayer(container, &container->layers[ZWLR_LAYER_SHELL_V1_LAYER_BOTTOM], &depth);
+
+    /* Regular views (back-to-front: focused view is at front of list, should render last) */
     struct View *e;
     wl_list_for_each_reverse(e, &container->server->views, link) {
       if (!e->xdg || !e->xdg->surface || !e->xdg->surface->mapped) {
@@ -217,6 +233,12 @@ HANDLE(frame, void, Output) {
       wlr_xdg_surface_for_each_surface(e->xdg, renderSurfaceIter, &renderContext);
       depth++;
     }
+
+    /* TOP layer (layer 2) */
+    renderLayer(container, &container->layers[ZWLR_LAYER_SHELL_V1_LAYER_TOP], &depth);
+
+    /* OVERLAY layer (layer 3) */
+    renderLayer(container, &container->layers[ZWLR_LAYER_SHELL_V1_LAYER_OVERLAY], &depth);
 
     /* Capture screen content for cursor effect (clamped to screen bounds) */
     int copy_x = scissor_x;
@@ -427,4 +449,90 @@ frame_done:
 
 void renderUI(struct Output *output) {
 
+}
+
+void renderLayerSurfaceIter(struct wlr_surface *surface, int x, int y, void *data) {
+  struct LayerRenderContext *ctx = (struct LayerRenderContext*)data;
+
+  struct wlr_texture *texture = wlr_surface_get_texture(surface);
+  if (!texture) {
+    goto frame_done;
+  }
+
+  int width = surface->current.width;
+  int height = surface->current.height;
+
+  struct wlr_gles2_texture_attribs attribs;
+  wlr_gles2_texture_get_attribs(texture, &attribs);
+
+  struct shader *shader = (attribs.target == GL_TEXTURE_EXTERNAL_OES) 
+    ? ctx->output->windowShaderExternal 
+    : ctx->output->windowShader;
+  useShader(shader);
+
+  mat4 proj = GLM_MAT4_IDENTITY_INIT;
+  glm_ortho(0, ctx->output->wlr_output->width, 0, ctx->output->wlr_output->height, -10.0f, 10.0f, proj);
+  set4fv(shader, "projection", 1, GL_FALSE, (float*)proj);
+  
+  mat4 view = GLM_MAT4_IDENTITY_INIT;
+  set4fv(shader, "view", 1, GL_FALSE, (float*)view);
+
+  mat4 model = GLM_MAT4_IDENTITY_INIT;
+  float surface_x = ctx->x + x;
+  float surface_y = ctx->y + y;
+  glm_translate(model, (vec3){surface_x, surface_y, ctx->depth});
+  set4fv(shader, "model", 1, GL_FALSE, (float*)model);
+
+  glActiveTexture(GL_TEXTURE0);
+  glBindTexture(attribs.target, attribs.tex);
+  
+  glTexParameteri(attribs.target, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+  glTexParameteri(attribs.target, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+  glTexParameteri(attribs.target, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+  glTexParameteri(attribs.target, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+  
+  glUniform1i(glGetUniformLocation(shader->ID, "s_texture"), 0);
+
+  GLfloat vVertices[] = {
+    0,  0, 0.0f,    0.0f,  0.0f,
+    0, height, 0.0f, 0.0f,  1.0f,
+    width, height, 0.0f, 1.0f,  1.0f,
+    width,  0, 0.0f, 1.0f,  0.0f
+  };
+  GLushort indices[] = { 0, 1, 2, 0, 2, 3 };
+
+  glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), vVertices);
+  glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), &vVertices[3]);
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+
+  glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_SHORT, indices);
+
+  glDisableVertexAttribArray(0);
+  glDisableVertexAttribArray(1);
+
+frame_done:
+  struct timespec now;
+  clock_gettime(CLOCK_MONOTONIC, &now);
+  wlr_surface_send_frame_done(surface, &now);
+}
+
+static void renderLayer(struct Output *output, struct wl_list *layer_list, float *depth) {
+  struct LayerSurface *ls;
+  wl_list_for_each(ls, layer_list, link) {
+    if (!ls->mapped || !ls->layer_surface->surface->mapped) {
+      continue;
+    }
+
+    struct LayerRenderContext ctx = {
+      .output = output,
+      .x = ls->x,
+      .y = ls->y,
+      .depth = *depth,
+    };
+
+    wlr_surface_for_each_surface(ls->layer_surface->surface, 
+                                  renderLayerSurfaceIter, &ctx);
+    (*depth)++;
+  }
 }

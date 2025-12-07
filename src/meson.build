@@ -6,5 +6,6 @@ src += files([
   'view.c',  
   'output.c',
   'keyboard.c',
-  'aux.c'
+  'aux.c',
+  'layer.c'
 ])

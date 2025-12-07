@@ -16,6 +16,8 @@ typedef struct Output {
   struct wl_listener requestState;
   struct wl_listener destroy;
 
+  struct wl_list layers[4];
+
   struct shader *windowShader;
   struct shader *windowShaderExternal;
   struct shader *cursorShader;
@@ -52,4 +54,11 @@ struct RenderContext {
   cairo_t *uiCtx;
 };
 
+struct LayerRenderContext {
+  struct Output *output;
+  int x, y;
+  float depth;
+};
+
 void renderSurfaceIter(struct wlr_surface *, int, int, void *);
+void renderLayerSurfaceIter(struct wlr_surface *, int, int, void *);
